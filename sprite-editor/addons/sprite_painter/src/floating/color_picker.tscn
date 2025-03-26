@@ -27,17 +27,7 @@ shadow_color = Color(0.8, 0.8, 0.8, 1)
 shadow_size = 4
 anti_aliasing = false
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_eeewi"]
-bg_color = Color(1, 1, 1, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.6, 0.6, 0.6, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_cicb3"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_70jsv"]
 bg_color = Color(1, 1, 1, 1)
@@ -62,7 +52,19 @@ corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_cicb3"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_eeewi"]
+bg_color = Color(1, 1, 1, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.6, 0.6, 0.6, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_qpcds"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_5mbmh"]
 bg_color = Color(1, 1, 1, 1)
@@ -77,15 +79,13 @@ corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_qpcds"]
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_fjbou"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_xa6r5"]
 content_margin_left = 5.0
 content_margin_top = 3.0
 content_margin_right = 5.0
 content_margin_bottom = 3.0
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_fjbou"]
 
 [sub_resource type="InputEventKey" id="InputEventKey_0j7g6"]
 keycode = 88
@@ -94,7 +94,7 @@ keycode = 88
 resource_name = "X"
 events = [SubResource("InputEventKey_0j7g6")]
 
-[sub_resource type="Image" id="Image_670mm"]
+[sub_resource type="Image" id="Image_0xouu"]
 data = {
 "data": PackedByteArray(255, 255, 255, 0, 255, 255, 255, 0, 255, 128, 128, 4, 255, 128, 128, 4, 255, 128, 128, 4, 255, 128, 128, 4, 255, 128, 128, 4, 255, 128, 128, 4, 255, 128, 128, 4, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 255, 255, 0, 255, 93, 93, 131, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 255, 255, 0, 255, 93, 93, 255, 255, 93, 93, 131, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 255, 255, 0, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 131, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 255, 255, 0, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 94, 94, 127, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 128, 128, 4, 255, 128, 128, 4, 255, 128, 128, 4, 255, 128, 128, 4, 255, 128, 128, 4, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 231, 255, 93, 93, 55, 255, 97, 97, 58, 255, 93, 93, 233, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 231, 255, 94, 94, 54, 255, 94, 94, 57, 255, 93, 93, 233, 255, 93, 93, 255, 255, 93, 93, 255, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 97, 97, 42, 255, 255, 255, 0, 255, 255, 255, 0, 255, 97, 97, 42, 255, 93, 93, 233, 255, 93, 93, 232, 255, 93, 93, 41, 255, 255, 255, 0, 255, 255, 255, 0, 255, 97, 97, 42, 255, 93, 93, 233, 255, 93, 93, 232, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 96, 96, 45, 255, 97, 97, 42, 255, 255, 255, 0, 255, 97, 97, 42, 255, 97, 97, 42, 255, 255, 255, 0, 255, 98, 98, 47, 255, 97, 97, 42, 255, 255, 255, 0, 255, 97, 97, 42, 255, 97, 97, 42, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 96, 96, 45, 255, 93, 93, 235, 255, 93, 93, 233, 255, 97, 97, 42, 255, 255, 255, 0, 255, 255, 255, 0, 255, 94, 94, 46, 255, 93, 93, 236, 255, 93, 93, 233, 255, 97, 97, 42, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 235, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 233, 255, 95, 95, 59, 255, 96, 96, 61, 255, 93, 93, 235, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 233, 255, 95, 95, 59, 255, 96, 96, 61, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 93, 93, 255, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 93, 93, 252, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0, 255, 255, 255, 0),
 "format": "RGBA8",
@@ -104,7 +104,7 @@ data = {
 }
 
 [sub_resource type="ImageTexture" id="ImageTexture_qaodq"]
-image = SubResource("Image_670mm")
+image = SubResource("Image_0xouu")
 
 [node name="ColorSettings" type="MarginContainer"]
 anchors_preset = 2
@@ -169,10 +169,10 @@ tooltip_text = "(Right Click)
 Secondary Color
 
 Click to open the Color Picker."
-theme_override_styles/normal = SubResource("StyleBoxFlat_eeewi")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_cicb3")
 theme_override_styles/hover = SubResource("StyleBoxFlat_70jsv")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_gjl5v")
-theme_override_styles/focus = SubResource("StyleBoxEmpty_cicb3")
+theme_override_styles/normal = SubResource("StyleBoxFlat_eeewi")
 
 [node name="Frame" type="Button" parent="Container/Box/Box/Box/Control/Color2"]
 show_behind_parent = true
@@ -183,10 +183,10 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_styles/normal = SubResource("StyleBoxFlat_5mbmh")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_qpcds")
 theme_override_styles/hover = SubResource("StyleBoxFlat_5mbmh")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_5mbmh")
-theme_override_styles/focus = SubResource("StyleBoxEmpty_qpcds")
+theme_override_styles/normal = SubResource("StyleBoxFlat_5mbmh")
 
 [node name="Color1" type="Button" parent="Container/Box/Box/Box/Control"]
 self_modulate = Color(0.498039, 0.498039, 0.498039, 1)
@@ -197,10 +197,10 @@ tooltip_text = "(Left Click)
 Primary Color
 
 Click to open the Color Picker."
-theme_override_styles/normal = SubResource("StyleBoxFlat_eeewi")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_cicb3")
 theme_override_styles/hover = SubResource("StyleBoxFlat_70jsv")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_gjl5v")
-theme_override_styles/focus = SubResource("StyleBoxEmpty_cicb3")
+theme_override_styles/normal = SubResource("StyleBoxFlat_eeewi")
 
 [node name="Frame2" type="Button" parent="Container/Box/Box/Box/Control/Color1"]
 show_behind_parent = true
@@ -211,10 +211,10 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_styles/normal = SubResource("StyleBoxFlat_5mbmh")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_qpcds")
 theme_override_styles/hover = SubResource("StyleBoxFlat_5mbmh")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_5mbmh")
-theme_override_styles/focus = SubResource("StyleBoxEmpty_qpcds")
+theme_override_styles/normal = SubResource("StyleBoxFlat_5mbmh")
 
 [node name="Control2" type="CenterContainer" parent="Container/Box/Box/Box/Control"]
 layout_mode = 1
@@ -232,11 +232,11 @@ tooltip_text = "(X)
 Swap Primary/Secondary Colors
 
 The Screen Color Picker (Alt) will always change the Primary (Left Mouse Button) color."
-theme_override_styles/normal = SubResource("StyleBoxEmpty_xa6r5")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_fjbou")
+theme_override_styles/disabled = SubResource("StyleBoxEmpty_xa6r5")
 theme_override_styles/hover = SubResource("StyleBoxEmpty_xa6r5")
 theme_override_styles/pressed = SubResource("StyleBoxEmpty_xa6r5")
-theme_override_styles/disabled = SubResource("StyleBoxEmpty_xa6r5")
-theme_override_styles/focus = SubResource("StyleBoxEmpty_fjbou")
+theme_override_styles/normal = SubResource("StyleBoxEmpty_xa6r5")
 shortcut = SubResource("Shortcut_8hnrs")
 shortcut_in_tooltip = false
 icon = SubResource("ImageTexture_qaodq")
@@ -261,11 +261,11 @@ tooltip_text = "(Alt)
 Color Sampler
 
 Can pick color from the editor screen, or the image. Change this in the Color Picker accessed by clicking a color here."
-theme_override_styles/normal = SubResource("StyleBoxEmpty_xa6r5")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_fjbou")
+theme_override_styles/disabled = SubResource("StyleBoxEmpty_xa6r5")
 theme_override_styles/hover = SubResource("StyleBoxEmpty_xa6r5")
 theme_override_styles/pressed = SubResource("StyleBoxEmpty_xa6r5")
-theme_override_styles/disabled = SubResource("StyleBoxEmpty_xa6r5")
-theme_override_styles/focus = SubResource("StyleBoxEmpty_fjbou")
+theme_override_styles/normal = SubResource("StyleBoxEmpty_xa6r5")
 icon = SubResource("ImageTexture_qaodq")
 flat = true
 icon_alignment = 1
