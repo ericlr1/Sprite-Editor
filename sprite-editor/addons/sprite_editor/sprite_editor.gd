@@ -36,46 +36,50 @@ var current_image: Image
 var current_texture: ImageTexture
 var current_path := ""
 var canvas_drawing: CanvasDrawing 
+var panning := false
+var last_pan_position := Vector2.ZERO
 
 @onready var scroll_container: ScrollContainer = $VBoxContainer/ScrollContainer
 @onready var canvas: TextureRect = $VBoxContainer/ScrollContainer/Canvas
 @onready var tools_container: HBoxContainer = $VBoxContainer/Toolbar/ToolsContainer
 @onready var color_picker: ColorPickerButton = $VBoxContainer/Toolbar/ColorPickerButton
-@onready var brush_size_slider: Slider = $VBoxContainer/Toolbar/HBoxContainer/HSlider
+@onready var brush_size_label: Label = $VBoxContainer/Toolbar/HBoxContainer/CenterContainer2/Size
+@onready var brush_size_slider: Slider = $VBoxContainer/Toolbar/HBoxContainer/CenterContainer/HSlider
 @onready var save_dialog: FileDialog = $SaveDialog
 @onready var open_dialog: FileDialog = $OpenDialog
 
 func _ready():
-	self.visible = true
+	#TODO: Ver si quitamos esto -> self.visible = true
 	
 	# Remove existing CanvasDrawing node if it exists
 	for child in scroll_container.get_children():
 		if child is CanvasDrawing:
 			child.queue_free()
-			 
-	# Visualize the canvas area
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(1, 0, 0)  # red
-	canvas.add_theme_stylebox_override("panel", style)
 	
+	#Background
 	var bg_style = StyleBoxFlat.new()
 	bg_style.bg_color = Color(0.15, 0.15, 0.15)  # grey
 	scroll_container.add_theme_stylebox_override("panel", bg_style)
 	
+	# Instansciate the CanvasDrawin
 	canvas_drawing = CanvasDrawing.new(self)
 	scroll_container.add_child(canvas_drawing)
 	scroll_container.move_child(canvas_drawing, 0)
 	
 	_setup_theme()
 	_setup_tools()
-	new_image(64, 64)
+	new_image(256, 256)
 	_update_zoom()
 	
+	# Signals setup
 	color_picker.color_changed.connect(_on_color_changed)
 	brush_size_slider.value_changed.connect(_on_brush_size_changed)
 	$VBoxContainer/Toolbar/New.pressed.connect(_on_NewButton_pressed)
 	$VBoxContainer/Toolbar/Open.pressed.connect(_on_OpenButton_pressed)
 	$VBoxContainer/Toolbar/Save.pressed.connect(_on_SaveButton_pressed)
+	
+	# Brush size label update
+	brush_size_label.text = "%d" % brush_size_slider.value
 
 func _setup_theme():
 	var bg_color = get_theme_color("base_color", "Editor")
@@ -122,7 +126,7 @@ func _setup_tools():
 
 func new_image(width: int, height: int):
 	current_image = Image.create(width, height, false, Image.FORMAT_RGBA8)
-	current_image.fill(Color(1, 0, 0, 1))  # Red for visibility
+	current_image.fill(Color(1, 1, 1, 1))  # Red for visibility
 	
 	# Reset zoom and texture
 	zoom_level = 1.0
@@ -257,12 +261,12 @@ func _draw_circle_shape(center: Vector2, radius: float):
 	current_image.unlock()
 
 func _on_Canvas_gui_input(event):
-	# Handle mouse wheel for zoom
+	# Mouse wheel zoom handle
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom_level = clamp(zoom_level * 1.1, 0.1, 8.0)
 			_update_zoom()
-			get_viewport().set_input_as_handled()  # Block default scrolling
+			get_viewport().set_input_as_handled()
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoom_level = clamp(zoom_level / 1.1, 0.1, 8.0)
 			_update_zoom()
@@ -275,7 +279,9 @@ func _on_color_changed(color: Color):
 	current_color = color
 
 func _on_brush_size_changed(value: float):
-	brush_size = clampi(int(value), 1, 32)
+	print("Brush size changed: ", value)
+	brush_size_label.text = "%d" % value
+	brush_size = value
 
 func _on_NewButton_pressed():
 	print("New button pressed")
@@ -323,6 +329,28 @@ func _input(event):
 		scroll_container.scroll_horizontal = target_h
 		scroll_container.scroll_vertical = target_v
 		print("Centered at: ", Vector2(target_h, target_v))
+
+func _unhandled_input(event: InputEvent):
+	# Pan con click central
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_MIDDLE:
+			if event.pressed:
+				panning = true
+				last_pan_position = get_global_mouse_position()
+				Input.set_default_cursor_shape(Input.CURSOR_DRAG)
+				get_viewport().set_input_as_handled()
+			else:
+				panning = false
+				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+				get_viewport().set_input_as_handled()
+	
+	elif event is InputEventMouseMotion and panning:
+		var current_pos = get_global_mouse_position()
+		var delta = last_pan_position - current_pos
+		scroll_container.scroll_horizontal += delta.x
+		scroll_container.scroll_vertical += delta.y
+		last_pan_position = current_pos
+		get_viewport().set_input_as_handled()
 
 func _exit_tree():
 	# Cleanup CanvasDrawing node
