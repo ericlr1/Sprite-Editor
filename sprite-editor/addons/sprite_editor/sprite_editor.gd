@@ -107,6 +107,7 @@ func _setup_theme():
 	add_theme_stylebox_override("pressed", button_hover)
 	add_theme_stylebox_override("focus", button_style)
 
+# Dynamic tools button creation
 func _setup_tools():
 	var tools = {
 		"Pencil": TOOLS.PENCIL,
@@ -116,17 +117,21 @@ func _setup_tools():
 		"Circle": TOOLS.CIRCLE
 	}
 	
+	# Button group to switch by tool
+	var button_group = ButtonGroup.new()
+	
 	for tool_name in tools:
 		var btn = Button.new()
 		btn.text = tool_name
 		btn.toggle_mode = true
+		btn.button_group = button_group
 		btn.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 		btn.connect("pressed", _on_tool_selected.bind(tools[tool_name]))
 		tools_container.add_child(btn)
 
 func new_image(width: int, height: int):
 	current_image = Image.create(width, height, false, Image.FORMAT_RGBA8)
-	current_image.fill(Color(1, 1, 1, 1))  # Red for visibility
+	current_image.fill(Color(1, 1, 1, 1)) 
 	
 	# Reset zoom and texture
 	zoom_level = 1.0
@@ -181,35 +186,35 @@ func _is_within_canvas(pos: Vector2) -> bool:
 	return pos.x >= 0 && pos.x < current_image.get_width() && pos.y >= 0 && pos.y < current_image.get_height()
 
 func _draw_pixel(pos: Vector2, color: Color):
-	current_image.lock()
-	for x in range(brush_size):
-		for y in range(brush_size):
-			var px = pos.x - brush_size/2 + x
+	current_image.lock()									# Block the image to safe-write
+	for x in range(brush_size):								# Width iteration (Square)
+		for y in range(brush_size):							# Height iteration (Square)
+			var px = pos.x - brush_size/2 + x				# Center the circle arround the pos
 			var py = pos.y - brush_size/2 + y
-			if _is_within_canvas(Vector2(px, py)):
-				current_image.set_pixel(px, py, color)
-	current_image.unlock()
+			if _is_within_canvas(Vector2(px, py)):			# Verify that the pixel to paint is in the canvas
+				current_image.set_pixel(px, py, color)		# Change the color of the pixel
+	current_image.unlock()									# Unblock the image
 
 func _draw_line(start: Vector2, end: Vector2, color: Color):
-	var points = _get_line_points(start, end)
-	for point in points:
-		_draw_pixel(point, color)
+	var points = _get_line_points(start, end)				# Get the points in the line
+	for point in points:									# Iterate all the points in the line
+		_draw_pixel(point, color)							# Changes the color of the pixels in the line like the pencil
 	_update_texture()
 
 func _get_line_points(start: Vector2, end: Vector2) -> Array:
 	var points = []
-	var dx = absi(end.x - start.x)
-	var dy = -absi(end.y - start.y)
+	var dx = absi(end.x - start.x) # Distance in X
+	var dy = -absi(end.y - start.y) # Distance in Y
 	var sx = 1 if start.x < end.x else -1
 	var sy = 1 if start.y < end.y else -1
 	var err = dx + dy
 	
-	var x = start.x
-	var y = start.y
+	var x = start.x # Starting X pos
+	var y = start.y # Starting Y pos
 	
-	while true:
-		points.append(Vector2(x, y))
-		if x == end.x && y == end.y:
+	while true: # Infinite loop to paint all the points
+		points.append(Vector2(x, y)) # Add the actual point to the vector of points
+		if x == end.x && y == end.y: # If it's the last point exit the loop
 			break
 		var e2 = 2 * err
 		if e2 >= dy:
@@ -218,56 +223,71 @@ func _get_line_points(start: Vector2, end: Vector2) -> Array:
 		if e2 <= dx:
 			err += dx
 			y += sy
-	return points
+	return points # Return tall the points in the line
 
 func _flood_fill(pos: Vector2):
-	var target_color = current_image.get_pixelv(pos)
-	if target_color == current_color:
+	var target_color = current_image.get_pixelv(pos) # Gets the color where the user clicked (the one thah should be changed to the current_color)
+	if target_color == current_color: # If the clicked color is the same as the current_color skip all
 		return
+
+	# (TODO: Maybe change to Scanline in the future)
+	# === BFS Algorithm to fill the shape === 
+	var queue = [pos] # Init a queue with the initial position
+	current_image.lock() # Blocks the iname to safe-write on it
 	
-	var queue = [pos]
-	current_image.lock()
-	
+	# Loop the queue until it's empty
 	while not queue.is_empty():
-		var p = queue.pop_front()
-		if _is_within_canvas(p) && current_image.get_pixelv(p) == target_color:
-			current_image.set_pixelv(p, current_color)
-			queue.append(Vector2(p.x + 1, p.y))
-			queue.append(Vector2(p.x - 1, p.y))
-			queue.append(Vector2(p.x, p.y + 1))
-			queue.append(Vector2(p.x, p.y - 1))
+		var p = queue.pop_front() # Extract the firs element of the queue
+		if _is_within_canvas(p) && current_image.get_pixelv(p) == target_color: # Verify that the pixel in inside the canvas and the pixel is the same color as the target
+			current_image.set_pixelv(p, current_color) # Change the color of the selected pixel
+			
+			# Add the next 4 directions to the queue
+			queue.append(Vector2(p.x + 1, p.y)) # Right
+			queue.append(Vector2(p.x - 1, p.y)) # Left
+			queue.append(Vector2(p.x, p.y + 1)) # Bottom
+			queue.append(Vector2(p.x, p.y - 1)) # Up
 	
-	current_image.unlock()
-	_update_texture()
+	# Unlock the inage and update the texture
+	current_image.unlock() 
+	_update_texture() # TODO: Revisar si esto está haciendo que hayan dos update_texture al soltar el click
 
 func _draw_rect_shape(start: Vector2, end: Vector2):
-	current_image.lock()
-	var rect = Rect2i(start, end - start).abs()
-	for x in rect.size.x:
-		for y in rect.size.y:
-			var pos = Vector2(rect.position.x + x, rect.position.y + y)
-			if _is_within_canvas(pos):
-				current_image.set_pixelv(pos, current_color)
-	current_image.unlock()
+	current_image.lock() # Blocks the iname to safe-write on it
+	var rect = Rect2i(start, end - start).abs() # Create the rectangle
+	for x in rect.size.x: # Iterate the columns
+		for y in rect.size.y: # Iterate the rows
+			var pos = Vector2(rect.position.x + x, rect.position.y + y) # Calculates the pixel position
+			if _is_within_canvas(pos): # Verify if the pixel inside the canvas
+				current_image.set_pixelv(pos, current_color) # Change teh color of the pixel
+	current_image.unlock() # Unlock the inage
 
 func _draw_circle_shape(center: Vector2, radius: float):
-	current_image.lock()
-	var radius_sq = pow(radius, 2)
-	for x in range(center.x - radius, center.x + radius):
-		for y in range(center.y - radius, center.y + radius):
-			var pos = Vector2(x, y)
-			if _is_within_canvas(pos) && pos.distance_squared_to(center) <= radius_sq:
-				current_image.set_pixelv(pos, current_color)
-	current_image.unlock()
+	current_image.lock() # Blocks the iname to safe-write on it
+	var radius_sq = pow(radius, 2) # Calculate the power of the radius
+	for x in range(center.x - radius, center.x + radius): # Iterate the columns (Square)
+		for y in range(center.y - radius, center.y + radius): # Iterate the rows (Square)
+			var pos = Vector2(x, y) # Pixel position
+			if _is_within_canvas(pos) && pos.distance_squared_to(center) <= radius_sq: # Verify that the pixel is in the canvas and inside the circle
+				current_image.set_pixelv(pos, current_color) # Change the color of the pixel
+	current_image.unlock() # Unlock the inage
 
 func _on_Canvas_gui_input(event):
+	print("_on_Canvas_gui_input") #DEBUG: Not printing this
+	# Update texture while painting
+	if event is InputEventMouseMotion and is_drawing:
+		print("Updated texture while painting")
+		_draw_pixel(_get_canvas_position(event.position), current_color)
+		_update_texture()  
+		
 	# Mouse wheel zoom handle
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			print("Zoom ON")
 			zoom_level = clamp(zoom_level * 1.1, 0.1, 8.0)
 			_update_zoom()
 			get_viewport().set_input_as_handled()
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			print("Zoom OFF")
 			zoom_level = clamp(zoom_level / 1.1, 0.1, 8.0)
 			_update_zoom()
 			get_viewport().set_input_as_handled()
@@ -289,31 +309,90 @@ func _on_NewButton_pressed():
 	# Force focus to show hover state
 	await get_tree().process_frame
 	$VBoxContainer/Toolbar/New.grab_focus()
+	print("New button pressed - END")
 
 func _on_OpenButton_pressed():
+	# Show Open dialog
 	print("Open button pressed")
-	open_dialog.popup_centered()
+	if open_dialog:
+		open_dialog.popup_centered()
+	else:
+		push_error("OpenDialog not initialized!")
+		OS.alert("Error: Open dialog not configured", "Critical Error")
 
 func _on_SaveButton_pressed():
+	# Show Save dialog
 	print("Save button pressed")
-	save_dialog.popup_centered()
+	if save_dialog:
+		save_dialog.popup_centered()
+	else:
+		push_error("SaveDialog not initialized!")
+		OS.alert("Error: Save dialog not configured", "Critical Error")
 
 func _on_SaveDialog_file_selected(path: String):
-	current_image.save_png(path)
+	# Save the image in the "path" as a .png
+	if not current_image:
+		OS.alert("No image to save!", "Save Error")
+		return
+	
+	if path.get_extension().to_lower() != "png":
+		OS.alert("Only PNG format supported!", "Format Error")
+		return
+	
+	var save_result = current_image.save_png(path)
+	if save_result != OK:
+		push_error("Failed to save PNG (Error code: %d)" % save_result)
+		OS.alert("Failed to save image!\nCheck file permissions and path.", "Save Error")
+		return
+	
+	# Update the resource of the editor
 	_notify_resource_update(path)
+	OS.alert("Image saved successfully!", "Success")
 
 func _on_OpenDialog_file_selected(path: String):
-	current_image = Image.load_from_file(path)
+	# Update the open file path
+	if not FileAccess.file_exists(path):
+		OS.alert("File does not exist!", "Open Error")
+		return
+	
+	# Load the image from a file
+	var loaded_image = Image.load_from_file(path)
+	if loaded_image == null:
+		push_error("Failed to load image from: " + path)
+		OS.alert("Invalid image file format!", "Open Error")
+		return
+	
+	current_image = loaded_image
+	
+	# Update the current visible texture
 	_update_texture()
+	
+	# Update the resource of the editor
 	_notify_resource_update(path)
+	OS.alert("Image loaded successfully!", "Success")
 
 func _notify_resource_update(path: String):
-	EditorInterface.get_resource_filesystem().scan()
-	EditorInterface.get_resource_filesystem().scan_sources()
-	if ResourceLoader.exists(path):
-		EditorInterface.edit_resource(load(path))
+	# Scan the files of the project
+	var fs = EditorInterface.get_resource_filesystem()
+	fs.scan()
+	
+	# Scan the sources of the resources
+	fs.scan_sources()
+	
+	# Verify the resource exists
+	if not ResourceLoader.exists(path):
+		push_error("Resource not found: " + path)
+		return
+	
+	# Open the resource in the editor
+	var resource = load(path)
+	if resource:
+		EditorInterface.edit_resource(resource)
+	else:
+		push_error("Failed to load resource: " + path)
 
 func _input(event):
+	# Debug key F to center the canvas and zoom
 	if event is InputEventKey and event.pressed and event.keycode == KEY_F:
 		await get_tree().process_frame
 		
@@ -325,30 +404,33 @@ func _input(event):
 		var target_h = max(0, (canvas_size.x - viewport_size.x) / 2)
 		var target_v = max(0, (canvas_size.y - viewport_size.y) / 2)
 		
-		# Apply scroll
+		# Apply H/V scroll
 		scroll_container.scroll_horizontal = target_h
 		scroll_container.scroll_vertical = target_v
 		print("Centered at: ", Vector2(target_h, target_v))
 
 func _unhandled_input(event: InputEvent):
-	# Pan con click central
+	# Pan with wheel mouse click
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_MIDDLE:
 			if event.pressed:
+				# Start panning
 				panning = true
 				last_pan_position = get_global_mouse_position()
 				Input.set_default_cursor_shape(Input.CURSOR_DRAG)
 				get_viewport().set_input_as_handled()
 			else:
+				# End panning
 				panning = false
 				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 				get_viewport().set_input_as_handled()
 	
 	elif event is InputEventMouseMotion and panning:
-		var current_pos = get_global_mouse_position()
-		var delta = last_pan_position - current_pos
-		scroll_container.scroll_horizontal += delta.x
-		scroll_container.scroll_vertical += delta.y
+		# Panning moving
+		var current_pos = get_global_mouse_position() # Get mouse global pos
+		var delta = last_pan_position - current_pos # Calculate the diference of positions
+		scroll_container.scroll_horizontal += delta.x # Scroll X acording to dX
+		scroll_container.scroll_vertical += delta.y #Scroll Y acording to dY
 		last_pan_position = current_pos
 		get_viewport().set_input_as_handled()
 
