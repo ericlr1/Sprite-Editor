@@ -47,6 +47,7 @@ var last_pan_position := Vector2.ZERO
 @onready var brush_size_slider: Slider = $VBoxContainer/Toolbar/HBoxContainer/CenterContainer/HSlider
 @onready var save_dialog: FileDialog = $SaveDialog
 @onready var open_dialog: FileDialog = $OpenDialog
+@onready var new_dialog: Window = preload("res://addons/sprite_editor/NewDialog.tscn").instantiate()
 
 func _ready():
 	#TODO: Ver si quitamos esto -> self.visible = true
@@ -80,6 +81,11 @@ func _ready():
 	
 	# Brush size label update
 	brush_size_label.text = "%d" % brush_size_slider.value
+	
+	# Add the NewDialog node
+	add_child(new_dialog)
+	new_dialog.hide()
+	new_dialog.confirmed.connect(_on_new_dialog_confirmed)
 
 func _setup_theme():
 	var bg_color = get_theme_color("base_color", "Editor")
@@ -303,10 +309,12 @@ func _on_brush_size_changed(value: float):
 	brush_size_label.text = "%d" % value
 	brush_size = value
 
+func _on_new_dialog_confirmed(width: int, height: int):
+	new_image(width, height)
+
 func _on_NewButton_pressed():
 	print("New button pressed")
-	new_image(512, 512)
-	# Force focus to show hover state
+	new_dialog.popup_centered()
 	await get_tree().process_frame
 	$VBoxContainer/Toolbar/New.grab_focus()
 	print("New button pressed - END")
