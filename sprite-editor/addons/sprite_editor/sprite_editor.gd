@@ -24,7 +24,7 @@ class CanvasDrawing:
 					draw_arc( parent.shape_start_pos, radius, 0, TAU, 32, preview_color, 1.0, false)
 
 # Class-level variables
-enum TOOLS {PENCIL, ERASER, FILL, RECTANGLE, CIRCLE}
+enum TOOLS {PENCIL, ERASER, FILL, EYEDROPPER, RECTANGLE, CIRCLE}
 var current_tool := TOOLS.PENCIL
 var current_color := Color.BLACK
 var brush_size := 1
@@ -62,7 +62,7 @@ func _ready():
 	bg_style.bg_color = Color(0.15, 0.15, 0.15)  # grey
 	scroll_container.add_theme_stylebox_override("panel", bg_style)
 	
-	# Instansciate the CanvasDrawin
+	# Instansciate the CanvasDrawing
 	canvas_drawing = CanvasDrawing.new(self)
 	scroll_container.add_child(canvas_drawing)
 	scroll_container.move_child(canvas_drawing, 0)
@@ -75,6 +75,7 @@ func _ready():
 	# Signals setup
 	color_picker.color_changed.connect(_on_color_changed)
 	brush_size_slider.value_changed.connect(_on_brush_size_changed)
+	canvas.gui_input.connect(_on_canvas_gui_input)
 	$VBoxContainer/Toolbar/New.pressed.connect(_on_NewButton_pressed)
 	$VBoxContainer/Toolbar/Open.pressed.connect(_on_OpenButton_pressed)
 	$VBoxContainer/Toolbar/Save.pressed.connect(_on_SaveButton_pressed)
@@ -86,6 +87,10 @@ func _ready():
 	add_child(new_dialog)
 	new_dialog.hide()
 	new_dialog.confirmed.connect(_on_new_dialog_confirmed)
+	
+	# Reset mouse to hande mouse inputs
+	canvas.mouse_filter = Control.MOUSE_FILTER_STOP
+	canvas.focus_mode = Control.FOCUS_CLICK
 
 func _setup_theme():
 	var bg_color = get_theme_color("base_color", "Editor")
@@ -119,6 +124,7 @@ func _setup_tools():
 		"Pencil": TOOLS.PENCIL,
 		"Eraser": TOOLS.ERASER,
 		"Fill": TOOLS.FILL,
+		"Eyedropper": TOOLS.FILL,
 		"Rectangle": TOOLS.RECTANGLE,
 		"Circle": TOOLS.CIRCLE
 	}
@@ -142,6 +148,7 @@ func new_image(width: int, height: int):
 	# Reset zoom and texture
 	zoom_level = 1.0
 	_update_texture()
+	_update_zoom()
 	
 	# Wait for UI to update
 	await get_tree().process_frame
@@ -149,7 +156,7 @@ func new_image(width: int, height: int):
 	# Force reset scroll to top-left
 	scroll_container.scroll_horizontal = 0
 	scroll_container.scroll_vertical = 0
-	print("New image created. Scroll reset to (0, 0)")
+	print("New image created. Size: %dx%d" % [width, height])
 
 func load_texture(texture: ImageTexture):
 	current_texture = texture
@@ -169,20 +176,24 @@ func _update_texture():
 		canvas.queue_redraw()
 		print("Texture updated: ", current_texture)
 
-func _update_zoom():
+func _update_zoom(zoom_anchor: Vector2 = Vector2.ZERO):
 	if current_image:
 		var img_size = current_image.get_size()
-		var scaled_size = img_size * zoom_level
+		var new_size = img_size * zoom_level
 		
-		# Set canvas size to match zoom
-		canvas.custom_minimum_size = scaled_size
-		canvas.size = scaled_size
+		# Update canvas dimensions
+		canvas.custom_minimum_size = new_size
+		canvas.size = new_size
 		
-		# Force ScrollContainer to match the canvas size
-		scroll_container.custom_minimum_size = scaled_size
-		scroll_container.queue_redraw()
+		# Calculate new scroll position to maintain focus point
+		if zoom_anchor != Vector2.ZERO:
+			var target_x = zoom_anchor.x * zoom_level - (scroll_container.size.x / 2)
+			var target_y = zoom_anchor.y * zoom_level - (scroll_container.size.y / 2)
+			
+			scroll_container.scroll_horizontal = clamp(target_x, 0, new_size.x - scroll_container.size.x)
+			scroll_container.scroll_vertical = clamp(target_y, 0, new_size.y - scroll_container.size.y)
 		
-		print("Zoom updated. Canvas size: ", canvas.size)
+		print("Zoom Updated:", zoom_level, " | Canvas Size:", canvas.size)
 
 func _get_canvas_position(screen_pos: Vector2) -> Vector2:
 	var scroll_offset = Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
@@ -277,26 +288,37 @@ func _draw_circle_shape(center: Vector2, radius: float):
 				current_image.set_pixelv(pos, current_color) # Change the color of the pixel
 	current_image.unlock() # Unlock the inage
 
-func _on_Canvas_gui_input(event):
-	print("_on_Canvas_gui_input") #DEBUG: Not printing this
+# TODO: Fix the double call for the zoom function when zooming with the mouse wheel
+func _on_canvas_gui_input(event):
+	# Zoom with mouse wheel
+	if event.ctrl_pressed:
+		if event is InputEventMouseButton:
+			var viewport = get_viewport()
+			var mouse_pos = event.position
+			
+			# Calculate zoom anchor point (canvas-relative)
+			var canvas_rect = canvas.get_global_rect()
+			var zoom_anchor = (mouse_pos - canvas_rect.position + Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)) / zoom_level
+			print("Zoom Anchor: ", zoom_anchor)
+			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				zoom_level = clamp(zoom_level * 1.1, 0.1, 20.0)
+				_update_zoom(zoom_anchor)
+				get_viewport().set_input_as_handled()
+				return
+			
+			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				zoom_level = clamp(zoom_level / 1.1, 0.1, 20.0)
+				_update_zoom(zoom_anchor)
+				get_viewport().set_input_as_handled()
+				return
+		return  
+	
 	# Update texture while painting
 	if event is InputEventMouseMotion and is_drawing:
 		print("Updated texture while painting")
 		_draw_pixel(_get_canvas_position(event.position), current_color)
 		_update_texture()  
-		
-	# Mouse wheel zoom handle
-	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			print("Zoom ON")
-			zoom_level = clamp(zoom_level * 1.1, 0.1, 8.0)
-			_update_zoom()
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			print("Zoom OFF")
-			zoom_level = clamp(zoom_level / 1.1, 0.1, 8.0)
-			_update_zoom()
-			get_viewport().set_input_as_handled()
+	
 
 func _on_tool_selected(tool: TOOLS):
 	current_tool = tool
@@ -400,9 +422,13 @@ func _notify_resource_update(path: String):
 		push_error("Failed to load resource: " + path)
 
 func _input(event):
-	# Debug key F to center the canvas and zoom
+	# Debug key F to center the canvas and reset zoom
 	if event is InputEventKey and event.pressed and event.keycode == KEY_F:
 		await get_tree().process_frame
+		
+		# Reset zoom
+		zoom_level = 1.0
+		_update_zoom()
 		
 		# Get viewport and canvas sizes
 		var viewport_size = scroll_container.size
@@ -416,6 +442,7 @@ func _input(event):
 		scroll_container.scroll_horizontal = target_h
 		scroll_container.scroll_vertical = target_v
 		print("Centered at: ", Vector2(target_h, target_v))
+	
 
 func _unhandled_input(event: InputEvent):
 	# Pan with wheel mouse click
@@ -432,7 +459,6 @@ func _unhandled_input(event: InputEvent):
 				panning = false
 				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 				get_viewport().set_input_as_handled()
-	
 	elif event is InputEventMouseMotion and panning:
 		# Panning moving
 		var current_pos = get_global_mouse_position() # Get mouse global pos
