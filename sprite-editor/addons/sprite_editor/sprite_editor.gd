@@ -201,19 +201,22 @@ func _update_zoom(zoom_anchor: Vector2 = Vector2.ZERO):
 func _get_canvas_position(screen_pos: Vector2) -> Vector2:
 	var canvas_local_pos = canvas.get_local_mouse_position()
 	var scroll_offset = Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
-	return (canvas_local_pos + scroll_offset) / zoom_level
+	var pos = (canvas_local_pos + scroll_offset) / zoom_level # Calculate the pos
+	return pos.floor() # Snap pos to pixels
 
 func _is_within_canvas(pos: Vector2) -> bool:
 	return pos.x >= 0 && pos.x < current_image.get_width() && pos.y >= 0 && pos.y < current_image.get_height()
 
 func _draw_pixel(pos: Vector2, color: Color):
 	#current_image.lock()									# Block the image to safe-write
-	for x in range(brush_size):								# Width iteration (Square)
-		for y in range(brush_size):							# Height iteration (Square)
+	var radius = brush_size / 2.0
+	for x in range(brush_size):								# Width iteration (Circle)
+		for y in range(brush_size):							# Height iteration (Circle)
 			var px = pos.x - brush_size/2 + x				# Center the circle arround the pos
 			var py = pos.y - brush_size/2 + y
-			if _is_within_canvas(Vector2(px, py)):			# Verify that the pixel to paint is in the canvas
-				current_image.set_pixel(px, py, color)		# Change the color of the pixel
+			if Vector2(x - radius, y - radius).length_squared() <= radius * radius:
+				if _is_within_canvas(Vector2(px, py)):			# Verify that the pixel to paint is in the canvas
+					current_image.set_pixel(px, py, color)		# Change the color of the pixel
 	#current_image.unlock()									# Unblock the image
 
 func _draw_line(start: Vector2, end: Vector2, color: Color):
@@ -274,24 +277,38 @@ func _flood_fill(pos: Vector2):
 	_update_texture() # TODO: Revisar si esto está haciendo que hayan dos update_texture al soltar el click
 
 func _draw_rect_shape(start: Vector2, end: Vector2):
-	#current_image.lock() # Blocks the iname to safe-write on it
-	var rect = Rect2i(start, end - start).abs() # Create the rectangle
-	for x in rect.size.x: # Iterate the columns
-		for y in rect.size.y: # Iterate the rows
-			var pos = Vector2(rect.position.x + x, rect.position.y + y) # Calculates the pixel position
-			if _is_within_canvas(pos): # Verify if the pixel inside the canvas
-				current_image.set_pixelv(pos, current_color) # Change teh color of the pixel
-	#current_image.unlock() # Unlock the inage
+	# Get image dimensions for boundary checks
+	var img_width = current_image.get_width()
+	var img_height = current_image.get_height()
+	
+	# Calculate clamped rectangle coordinates
+	var rect = Rect2(
+		# Clamp start coordinates to image boundaries
+		Vector2(clamp(min(start.x, end.x), 0, img_width), clamp(min(start.y, end.y), 0, img_height)),
+		# Clamp dimensions to prevent overflow
+		Vector2(clamp(abs(end.x - start.x), 0, img_width), clamp(abs(end.y - start.y), 0, img_height))
+	)
+	
+	current_image.fill_rect(rect, current_color)
 
 func _draw_circle_shape(center: Vector2, radius: float):
-	#current_image.lock() # Blocks the iname to safe-write on it
-	var radius_sq = pow(radius, 2) # Calculate the power of the radius
-	for x in range(center.x - radius, center.x + radius): # Iterate the columns (Square)
-		for y in range(center.y - radius, center.y + radius): # Iterate the rows (Square)
-			var pos = Vector2(x, y) # Pixel position
-			if _is_within_canvas(pos) && pos.distance_squared_to(center) <= radius_sq: # Verify that the pixel is in the canvas and inside the circle
-				current_image.set_pixelv(pos, current_color) # Change the color of the pixel
-	#current_image.unlock() # Unlock the inage
+	var img_width = current_image.get_width()
+	var img_height = current_image.get_height()
+	
+	# Optimized bounds calculation (clamped to image edges)
+	var start_x = clamp(center.x - radius, 0, img_width)
+	var start_y = clamp(center.y - radius, 0, img_height)
+	var end_x = clamp(center.x + radius, 0, img_width)
+	var end_y = clamp(center.y + radius, 0, img_height)
+	
+	var radius_sq = radius * radius  # Pre-calculate squared radius
+	
+	# Batch pixel update loop
+	for x in range(start_x, end_x + 1): # Iterate Rows
+		for y in range(start_y, end_y + 1): # Iterate Columns
+			var pos = Vector2i(x, y)
+			if pos.distance_squared_to(center) <= radius_sq:
+				current_image.set_pixelv(pos, current_color)
 
 # TODO: Fix the double call for the zoom function when zooming with the mouse wheel
 func _on_canvas_gui_input(event):
@@ -324,7 +341,7 @@ func _on_canvas_gui_input(event):
 		if event.button_index == MOUSE_BUTTON_LEFT and current_tool == TOOLS.PENCIL:
 			if event.pressed:
 				is_drawing = true
-				last_position = _get_canvas_position(event.position)
+				last_position = _get_canvas_position(event.position) # Draw pixel with the selected color
 				_draw_pixel(last_position, current_color)
 				texture_update_pending = true
 			else:
@@ -334,7 +351,7 @@ func _on_canvas_gui_input(event):
 			if event.pressed:
 				is_drawing = true
 				last_position = _get_canvas_position(event.position)
-				_draw_pixel(last_position, Color.from_hsv(0, 0, 0, 0))
+				_draw_pixel(last_position, Color.from_hsv(0, 0, 0, 0)) # Draw pixel with 0 in alpha component
 				texture_update_pending = true
 			else:
 				is_drawing = false
@@ -347,6 +364,21 @@ func _on_canvas_gui_input(event):
 				texture_update_pending = true
 			else:
 				is_drawing = false
+		# === Rect/Elipse Tool ===
+		elif event.button_index == MOUSE_BUTTON_LEFT and current_tool in [TOOLS.RECTANGLE, TOOLS.CIRCLE]:
+			if event.pressed:
+				is_drawing = true
+				shape_start_pos = _get_canvas_position(event.position)
+			else:
+				is_drawing = false
+				var end_pos = _get_canvas_position(event.position)
+				match current_tool:
+					TOOLS.RECTANGLE:
+						_draw_rect_shape(shape_start_pos, end_pos)
+					TOOLS.CIRCLE:
+						var radius = shape_start_pos.distance_to(end_pos)
+						_draw_circle_shape(shape_start_pos, radius)
+				texture_update_pending = true
 	
 	# Update texture while painting
 	if event is InputEventMouseMotion and is_drawing:
