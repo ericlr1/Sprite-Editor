@@ -24,10 +24,10 @@ class CanvasDrawing:
 					draw_arc( parent.shape_start_pos, radius, 0, TAU, 32, preview_color, 1.0, false)
 
 # Class-level variables
-enum TOOLS {PENCIL, ERASER, FILL, EYEDROPPER, RECTANGLE, CIRCLE}
-var current_tool := TOOLS.PENCIL
+enum TOOLS {PENCIL, ERASER, FILL, RECTANGLE, CIRCLE, NONE}
+var current_tool := TOOLS.NONE
 var current_color := Color.BLACK
-var brush_size := 1
+var brush_size := 5
 var zoom_level := 1.0
 var is_drawing := false
 var last_position := Vector2.ZERO
@@ -35,6 +35,7 @@ var shape_start_pos := Vector2.ZERO
 var current_image: Image
 var current_texture: ImageTexture
 var current_path := ""
+var texture_update_pending = false
 var canvas_drawing: CanvasDrawing 
 var panning := false
 var last_pan_position := Vector2.ZERO
@@ -124,7 +125,6 @@ func _setup_tools():
 		"Pencil": TOOLS.PENCIL,
 		"Eraser": TOOLS.ERASER,
 		"Fill": TOOLS.FILL,
-		"Eyedropper": TOOLS.FILL,
 		"Rectangle": TOOLS.RECTANGLE,
 		"Circle": TOOLS.CIRCLE
 	}
@@ -144,6 +144,7 @@ func _setup_tools():
 func new_image(width: int, height: int):
 	current_image = Image.create(width, height, false, Image.FORMAT_RGBA8)
 	current_image.fill(Color(1, 1, 1, 1)) 
+	current_texture = null
 	
 	# Reset zoom and texture
 	zoom_level = 1.0
@@ -166,15 +167,17 @@ func load_texture(texture: ImageTexture):
 func _update_texture():
 	if current_image:
 		# DEBUG: Print image data
-		print("Updating texture. Image format: ", current_image.get_format(), " | Size: ", current_image.get_size())
+		#print("Updating texture. Image format: ", current_image.get_format(), " | Size: ", current_image.get_size())
+		# Create a new image on new_image
+		if not current_texture:
+			print("DEBUG: No current texture, creating a new one")
+			current_texture = ImageTexture.new()
 		
-		# Force create a NEW texture
-		current_texture = ImageTexture.create_from_image(current_image)
+		current_texture.set_image(current_image)
 		canvas.texture = current_texture
-		
-		# DEBUG: Force redraw
 		canvas.queue_redraw()
-		print("Texture updated: ", current_texture)
+		
+		#print("Texture updated: ", current_texture)
 
 func _update_zoom(zoom_anchor: Vector2 = Vector2.ZERO):
 	if current_image:
@@ -196,34 +199,36 @@ func _update_zoom(zoom_anchor: Vector2 = Vector2.ZERO):
 		print("Zoom Updated:", zoom_level, " | Canvas Size:", canvas.size)
 
 func _get_canvas_position(screen_pos: Vector2) -> Vector2:
+	var canvas_local_pos = canvas.get_local_mouse_position()
 	var scroll_offset = Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
-	return (screen_pos - scroll_container.position + scroll_offset - canvas.position) / zoom_level
+	return (canvas_local_pos + scroll_offset) / zoom_level
 
 func _is_within_canvas(pos: Vector2) -> bool:
 	return pos.x >= 0 && pos.x < current_image.get_width() && pos.y >= 0 && pos.y < current_image.get_height()
 
 func _draw_pixel(pos: Vector2, color: Color):
-	current_image.lock()									# Block the image to safe-write
+	#current_image.lock()									# Block the image to safe-write
 	for x in range(brush_size):								# Width iteration (Square)
 		for y in range(brush_size):							# Height iteration (Square)
 			var px = pos.x - brush_size/2 + x				# Center the circle arround the pos
 			var py = pos.y - brush_size/2 + y
 			if _is_within_canvas(Vector2(px, py)):			# Verify that the pixel to paint is in the canvas
 				current_image.set_pixel(px, py, color)		# Change the color of the pixel
-	current_image.unlock()									# Unblock the image
+	#current_image.unlock()									# Unblock the image
 
 func _draw_line(start: Vector2, end: Vector2, color: Color):
 	var points = _get_line_points(start, end)				# Get the points in the line
 	for point in points:									# Iterate all the points in the line
 		_draw_pixel(point, color)							# Changes the color of the pixels in the line like the pencil
-	_update_texture()
+	texture_update_pending = true
 
 func _get_line_points(start: Vector2, end: Vector2) -> Array:
+	# === Bresenham Algorithm ===
 	var points = []
-	var dx = absi(end.x - start.x) # Distance in X
-	var dy = -absi(end.y - start.y) # Distance in Y
-	var sx = 1 if start.x < end.x else -1
-	var sy = 1 if start.y < end.y else -1
+	var dx := absi(end.x - start.x) # Distance in X
+	var dy := -absi(end.y - start.y) # Distance in Y
+	var sx := 1 if start.x < end.x else -1
+	var sy := 1 if start.y < end.y else -1
 	var err = dx + dy
 	
 	var x = start.x # Starting X pos
@@ -250,7 +255,7 @@ func _flood_fill(pos: Vector2):
 	# (TODO: Maybe change to Scanline in the future)
 	# === BFS Algorithm to fill the shape === 
 	var queue = [pos] # Init a queue with the initial position
-	current_image.lock() # Blocks the iname to safe-write on it
+	#current_image.lock() # Blocks the iname to safe-write on it
 	
 	# Loop the queue until it's empty
 	while not queue.is_empty():
@@ -265,28 +270,28 @@ func _flood_fill(pos: Vector2):
 			queue.append(Vector2(p.x, p.y - 1)) # Up
 	
 	# Unlock the inage and update the texture
-	current_image.unlock() 
+	#current_image.unlock() 
 	_update_texture() # TODO: Revisar si esto está haciendo que hayan dos update_texture al soltar el click
 
 func _draw_rect_shape(start: Vector2, end: Vector2):
-	current_image.lock() # Blocks the iname to safe-write on it
+	#current_image.lock() # Blocks the iname to safe-write on it
 	var rect = Rect2i(start, end - start).abs() # Create the rectangle
 	for x in rect.size.x: # Iterate the columns
 		for y in rect.size.y: # Iterate the rows
 			var pos = Vector2(rect.position.x + x, rect.position.y + y) # Calculates the pixel position
 			if _is_within_canvas(pos): # Verify if the pixel inside the canvas
 				current_image.set_pixelv(pos, current_color) # Change teh color of the pixel
-	current_image.unlock() # Unlock the inage
+	#current_image.unlock() # Unlock the inage
 
 func _draw_circle_shape(center: Vector2, radius: float):
-	current_image.lock() # Blocks the iname to safe-write on it
+	#current_image.lock() # Blocks the iname to safe-write on it
 	var radius_sq = pow(radius, 2) # Calculate the power of the radius
 	for x in range(center.x - radius, center.x + radius): # Iterate the columns (Square)
 		for y in range(center.y - radius, center.y + radius): # Iterate the rows (Square)
 			var pos = Vector2(x, y) # Pixel position
 			if _is_within_canvas(pos) && pos.distance_squared_to(center) <= radius_sq: # Verify that the pixel is in the canvas and inside the circle
 				current_image.set_pixelv(pos, current_color) # Change the color of the pixel
-	current_image.unlock() # Unlock the inage
+	#current_image.unlock() # Unlock the inage
 
 # TODO: Fix the double call for the zoom function when zooming with the mouse wheel
 func _on_canvas_gui_input(event):
@@ -313,11 +318,47 @@ func _on_canvas_gui_input(event):
 				return
 		return  
 	
+	# Handle mouse click
+	if event is InputEventMouseButton:
+		# === Pencil Tool ===
+		if event.button_index == MOUSE_BUTTON_LEFT and current_tool == TOOLS.PENCIL:
+			if event.pressed:
+				is_drawing = true
+				last_position = _get_canvas_position(event.position)
+				_draw_pixel(last_position, current_color)
+				texture_update_pending = true
+			else:
+				is_drawing = false
+		# === Eraser Tool ===
+		elif event.button_index == MOUSE_BUTTON_LEFT and current_tool == TOOLS.ERASER:
+			if event.pressed:
+				is_drawing = true
+				last_position = _get_canvas_position(event.position)
+				_draw_pixel(last_position, Color.from_hsv(0, 0, 0, 0))
+				texture_update_pending = true
+			else:
+				is_drawing = false
+		# === Fill bucket Tool ===
+		elif event.button_index == MOUSE_BUTTON_LEFT and current_tool == TOOLS.FILL:
+			if event.pressed:
+				is_drawing = true
+				last_position = _get_canvas_position(event.position)
+				_flood_fill(last_position)
+				texture_update_pending = true
+			else:
+				is_drawing = false
+	
 	# Update texture while painting
 	if event is InputEventMouseMotion and is_drawing:
-		print("Updated texture while painting")
-		_draw_pixel(_get_canvas_position(event.position), current_color)
-		_update_texture()  
+		#print("Updated texture while painting")
+		var current_pos = _get_canvas_position(event.position)
+		if current_pos.distance_to(last_position) >= 0.5: 
+			if current_tool == TOOLS.PENCIL:
+				_draw_line(last_position, current_pos, current_color) # Draw a line between the last two point
+			elif current_tool == TOOLS.ERASER:
+				_draw_line(last_position, current_pos, Color.from_hsv(0, 0, 0, 0)) # Draw a line between the last two point
+			last_position = current_pos
+			texture_update_pending = true
 	
 
 func _on_tool_selected(tool: TOOLS):
@@ -423,7 +464,7 @@ func _notify_resource_update(path: String):
 
 func _input(event):
 	# Debug key F to center the canvas and reset zoom
-	if event is InputEventKey and event.pressed and event.keycode == KEY_F:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F and self.is_visible_in_tree():
 		await get_tree().process_frame
 		
 		# Reset zoom
@@ -467,6 +508,13 @@ func _unhandled_input(event: InputEvent):
 		scroll_container.scroll_vertical += delta.y #Scroll Y acording to dY
 		last_pan_position = current_pos
 		get_viewport().set_input_as_handled()
+
+func _process(delta):
+	if texture_update_pending:
+		_update_texture()
+		texture_update_pending = false
+		# Limit to 60 FPS
+		await get_tree().create_timer(1.0/60.0).timeout
 
 func _exit_tree():
 	# Cleanup CanvasDrawing node
