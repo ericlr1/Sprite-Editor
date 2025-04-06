@@ -81,6 +81,14 @@ func _ready():
 	$VBoxContainer/Toolbar/Open.pressed.connect(_on_OpenButton_pressed)
 	$VBoxContainer/Toolbar/Save.pressed.connect(_on_SaveButton_pressed)
 	
+	# Connect save dialog signals
+	save_dialog.file_selected.connect(_on_SaveDialog_file_selected)
+	
+	# Setup OpenDialog
+	open_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	open_dialog.add_filter("*.png", "PNG Images")
+	open_dialog.file_selected.connect(_on_OpenDialog_file_selected)
+	
 	# Brush size label update
 	brush_size_label.text = "%d" % brush_size_slider.value
 	
@@ -166,6 +174,10 @@ func load_texture(texture: ImageTexture):
 
 func _update_texture():
 	if current_image:
+		# If not a RGBA8 format, convert it to RGBA8
+		if current_image.get_format() != Image.FORMAT_RGBA8:
+			current_image.convert(Image.FORMAT_RGBA8)
+		
 		# DEBUG: Print image data
 		#print("Updating texture. Image format: ", current_image.get_format(), " | Size: ", current_image.get_size())
 		# Create a new image on new_image
@@ -415,84 +427,104 @@ func _on_NewButton_pressed():
 	print("New button pressed - END")
 
 func _on_OpenButton_pressed():
-	# Show Open dialog
-	print("Open button pressed")
-	if open_dialog:
-		open_dialog.popup_centered()
-	else:
-		push_error("OpenDialog not initialized!")
-		OS.alert("Error: Open dialog not configured", "Critical Error")
+	# Visual feedback
+	$VBoxContainer/Toolbar/Open.modulate = Color.SKY_BLUE
+	await get_tree().create_timer(0.2).timeout
+	$VBoxContainer/Toolbar/Open.modulate = Color.WHITE
+	
+	# Show dialog
+	open_dialog.popup_centered_ratio(0.8)
+
+func _on_OpenDialog_file_selected(path: String):
+	if not FileAccess.file_exists(path):
+		OS.alert("File not found!", "Open Error")
+		return
+	
+	var img = Image.new()
+	var err = img.load(path)
+	
+	# Check for errors
+	if err != OK:
+		OS.alert("Failed to load image!\nError code: %d" % err, "Open Error")
+		return
+	
+	# Update the state
+	current_image = img
+	current_path = path
+	_update_texture()
+	_update_zoom()
+	print("Image loaded successfully!")
 
 func _on_SaveButton_pressed():
-	# Show Save dialog
-	print("Save button pressed")
-	if save_dialog:
-		save_dialog.popup_centered()
-	else:
-		push_error("SaveDialog not initialized!")
-		OS.alert("Error: Save dialog not configured", "Critical Error")
+	# Visual feedback
+	$VBoxContainer/Toolbar/Save.modulate = Color.GREEN
+	await get_tree().create_timer(0.2).timeout
+	$VBoxContainer/Toolbar/Save.modulate = Color.WHITE
+	
+	# Configure save dialog
+	save_dialog.clear_filters()
+	save_dialog.add_filter("*.png", "PNG Images")
+	save_dialog.current_dir = "res://" if current_path.is_empty() else current_path.get_base_dir()
+	save_dialog.current_file = "new_sprite.png" if current_path.is_empty() else current_path.get_file()
+	save_dialog.popup_centered()
 
 func _on_SaveDialog_file_selected(path: String):
-	# Save the image in the "path" as a .png
+	# Validate image exists
 	if not current_image:
 		OS.alert("No image to save!", "Save Error")
 		return
 	
-	if path.get_extension().to_lower() != "png":
+	# Clean path format
+	var clean_path = path.replace("\\", "/").simplify_path()
+	
+	# Validate directory permissions
+	var dir = DirAccess.open(clean_path.get_base_dir())
+	if not dir:
+		OS.alert("Invalid save location or insufficient permissions!", "Save Error")
+		return
+	
+	# Validate file extension
+	if clean_path.get_extension().to_lower() != "png":
 		OS.alert("Only PNG format supported!", "Format Error")
 		return
 	
-	var save_result = current_image.save_png(path)
+	# Save operation
+	var save_result = current_image.save_png(clean_path)
+	
 	if save_result != OK:
-		push_error("Failed to save PNG (Error code: %d)" % save_result)
+		var error_msg = "Failed to save image!\nError code: %d" % save_result
+		push_error(error_msg)
+		OS.alert(error_msg, "Save Error")
+		return
+	
+	# Update current path and refresh
+	current_path = clean_path
+	_notify_resource_update(clean_path)
+	print("Image saved successfully!")	
+
+func _on_save_complete(path: String, result: int):
+	if result != OK:
+		push_error("Failed to save PNG (Error code: %d)" % result)
 		OS.alert("Failed to save image!\nCheck file permissions and path.", "Save Error")
 		return
 	
-	# Update the resource of the editor
+	# Update editor resources
 	_notify_resource_update(path)
 	OS.alert("Image saved successfully!", "Success")
 
-func _on_OpenDialog_file_selected(path: String):
-	# Update the open file path
-	if not FileAccess.file_exists(path):
-		OS.alert("File does not exist!", "Open Error")
-		return
-	
-	# Load the image from a file
-	var loaded_image = Image.load_from_file(path)
-	if loaded_image == null:
-		push_error("Failed to load image from: " + path)
-		OS.alert("Invalid image file format!", "Open Error")
-		return
-	
-	current_image = loaded_image
-	
-	# Update the current visible texture
-	_update_texture()
-	
-	# Update the resource of the editor
-	_notify_resource_update(path)
-	OS.alert("Image loaded successfully!", "Success")
-
 func _notify_resource_update(path: String):
-	# Scan the files of the project
+	# Force filesystem refresh
 	var fs = EditorInterface.get_resource_filesystem()
 	fs.scan()
 	
-	# Scan the sources of the resources
-	fs.scan_sources()
+	# Add slight delay for filesystem to recognize changes
+	await get_tree().create_timer(0.5).timeout
 	
-	# Verify the resource exists
-	if not ResourceLoader.exists(path):
-		push_error("Resource not found: " + path)
-		return
-	
-	# Open the resource in the editor
-	var resource = load(path)
-	if resource:
+	# Open resource if exists
+	if ResourceLoader.exists(path):
+		var resource = load(path)
 		EditorInterface.edit_resource(resource)
-	else:
-		push_error("Failed to load resource: " + path)
+		print("Resource updated in editor: ", path)
 
 func _input(event):
 	# Debug key F to center the canvas and reset zoom
