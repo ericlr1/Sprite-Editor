@@ -51,22 +51,19 @@ var last_pan_position := Vector2.ZERO
 @onready var new_dialog: Window = preload("res://addons/sprite_editor/NewDialog.tscn").instantiate()
 
 func _ready():
-	#TODO: Ver si quitamos esto -> self.visible = true
-	
 	# Remove existing CanvasDrawing node if it exists
 	for child in scroll_container.get_children():
 		if child is CanvasDrawing:
 			child.queue_free()
+	# Instansciate the CanvasDrawing
+	canvas_drawing = CanvasDrawing.new(self)
+	scroll_container.add_child(canvas_drawing)
+	scroll_container.move_child(canvas_drawing, 0)
 	
 	#Background
 	var bg_style = StyleBoxFlat.new()
 	bg_style.bg_color = Color(0.15, 0.15, 0.15)  # grey
 	scroll_container.add_theme_stylebox_override("panel", bg_style)
-	
-	# Instansciate the CanvasDrawing
-	canvas_drawing = CanvasDrawing.new(self)
-	scroll_container.add_child(canvas_drawing)
-	scroll_container.move_child(canvas_drawing, 0)
 	
 	_setup_theme()
 	_setup_tools()
@@ -88,18 +85,22 @@ func _ready():
 	open_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	open_dialog.add_filter("*.png", "PNG Images")
 	open_dialog.file_selected.connect(_on_OpenDialog_file_selected)
-	
-	# Brush size label update
-	brush_size_label.text = "%d" % brush_size_slider.value
-	
+
 	# Add the NewDialog node
 	add_child(new_dialog)
 	new_dialog.hide()
 	new_dialog.confirmed.connect(_on_new_dialog_confirmed)
 	
+	# Brush size label update
+	brush_size_label.text = "%d" % brush_size_slider.value
+	
 	# Reset mouse to hande mouse inputs
 	canvas.mouse_filter = Control.MOUSE_FILTER_STOP
 	canvas.focus_mode = Control.FOCUS_CLICK
+	
+	# Setup anti-aliasing
+	get_viewport().msaa_2d = Viewport.MSAA_4X
+	get_viewport().canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 func _setup_theme():
 	var bg_color = get_theme_color("base_color", "Editor")
@@ -210,12 +211,6 @@ func _update_zoom(zoom_anchor: Vector2 = Vector2.ZERO):
 		
 		print("Zoom Updated:", zoom_level, " | Canvas Size:", canvas.size)
 
-func _get_canvas_position(screen_pos: Vector2) -> Vector2:
-	var canvas_local_pos = canvas.get_local_mouse_position()
-	var scroll_offset = Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
-	var pos = (canvas_local_pos + scroll_offset) / zoom_level # Calculate the pos
-	return pos.floor() # Snap pos to pixels
-
 func _is_within_canvas(pos: Vector2) -> bool:
 	return pos.x >= 0 && pos.x < current_image.get_width() && pos.y >= 0 && pos.y < current_image.get_height()
 
@@ -324,86 +319,161 @@ func _draw_circle_shape(center: Vector2, radius: float):
 
 # TODO: Fix the double call for the zoom function when zooming with the mouse wheel
 func _on_canvas_gui_input(event):
-	# Zoom with mouse wheel
-	if event.ctrl_pressed:
-		if event is InputEventMouseButton:
-			var viewport = get_viewport()
-			var mouse_pos = event.position
-			
-			# Calculate zoom anchor point (canvas-relative)
-			var canvas_rect = canvas.get_global_rect()
-			var zoom_anchor = (mouse_pos - canvas_rect.position + Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)) / zoom_level
-			print("Zoom Anchor: ", zoom_anchor)
-			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-				zoom_level = clamp(zoom_level * 1.1, 0.1, 20.0)
-				_update_zoom(zoom_anchor)
-				get_viewport().set_input_as_handled()
-				return
-			
-			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-				zoom_level = clamp(zoom_level / 1.1, 0.1, 20.0)
-				_update_zoom(zoom_anchor)
-				get_viewport().set_input_as_handled()
-				return
-		return  
+	# ======================== ZOOM WITH CTRL + MOUSE WHEEL ========================
+	if event.ctrl_pressed and event is InputEventMouseButton:
+		var viewport = get_viewport()
+		var mouse_pos = event.position
+
+		# Calculate zoom anchor point relative to canvas and scroll offset
+		var canvas_rect = canvas.get_global_rect()
+		var zoom_anchor = (
+			mouse_pos - canvas_rect.position +
+			Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
+		) / zoom_level
+
+		# Zoom in (scroll up)
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			zoom_level = clamp(zoom_level * 1.1, 0.1, 20.0)
+			_update_zoom(zoom_anchor)
+			get_viewport().set_input_as_handled()
+			return
+
+		# Zoom out (scroll down)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			zoom_level = clamp(zoom_level / 1.1, 0.1, 20.0)
+			_update_zoom(zoom_anchor)
+			get_viewport().set_input_as_handled()
+			return
+
+	# ======================== SMOOTH PANNING ========================
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE:
+		panning = event.pressed
+
+		if panning:
+			# Begin panning – store starting mouse position
+			last_pan_position = event.global_position
+			Input.set_default_cursor_shape(Input.CURSOR_DRAG)
+			Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)  # Ensure cursor stays visible
+		else:
+			# End panning – restore cursor
+			Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+		get_viewport().set_input_as_handled()
+		return
+
+	elif event is InputEventMouseMotion and panning:
+		# Compute movement delta with smoothing factor (inverse direction of mouse)
+		var delta = (event.global_position - last_pan_position) * zoom_level * 1.2
 	
-	# Handle mouse click
-	if event is InputEventMouseButton:
-		# === Pencil Tool ===
-		if event.button_index == MOUSE_BUTTON_LEFT and current_tool == TOOLS.PENCIL:
-			if event.pressed:
-				is_drawing = true
-				last_position = _get_canvas_position(event.position) # Draw pixel with the selected color
-				_draw_pixel(last_position, current_color)
-				texture_update_pending = true
-			else:
-				is_drawing = false
-		# === Eraser Tool ===
-		elif event.button_index == MOUSE_BUTTON_LEFT and current_tool == TOOLS.ERASER:
-			if event.pressed:
-				is_drawing = true
-				last_position = _get_canvas_position(event.position)
-				_draw_pixel(last_position, Color.from_hsv(0, 0, 0, 0)) # Draw pixel with 0 in alpha component
-				texture_update_pending = true
-			else:
-				is_drawing = false
-		# === Fill bucket Tool ===
-		elif event.button_index == MOUSE_BUTTON_LEFT and current_tool == TOOLS.FILL:
-			if event.pressed:
-				is_drawing = true
-				last_position = _get_canvas_position(event.position)
-				_flood_fill(last_position)
-				texture_update_pending = true
-			else:
-				is_drawing = false
-		# === Rect/Elipse Tool ===
-		elif event.button_index == MOUSE_BUTTON_LEFT and current_tool in [TOOLS.RECTANGLE, TOOLS.CIRCLE]:
-			if event.pressed:
-				is_drawing = true
-				shape_start_pos = _get_canvas_position(event.position)
-			else:
-				is_drawing = false
-				var end_pos = _get_canvas_position(event.position)
-				match current_tool:
-					TOOLS.RECTANGLE:
-						_draw_rect_shape(shape_start_pos, end_pos)
-					TOOLS.CIRCLE:
-						var radius = shape_start_pos.distance_to(end_pos)
-						_draw_circle_shape(shape_start_pos, radius)
-				texture_update_pending = true
+		# Apply H/V scroll
+		scroll_container.scroll_horizontal -= delta.x
+		scroll_container.scroll_vertical -= delta.y
 	
-	# Update texture while painting
-	if event is InputEventMouseMotion and is_drawing:
-		#print("Updated texture while painting")
+   	 	# Scroll should be inside the limits
+		scroll_container.scroll_horizontal = clamp(
+			scroll_container.scroll_horizontal, 
+			0, 
+			max(0, canvas.size.x - scroll_container.size.x)
+		)
+		scroll_container.scroll_vertical = clamp(
+			scroll_container.scroll_vertical, 
+			0, 
+			max(0, canvas.size.y - scroll_container.size.y)
+		)
+
+		# Update position for next frame
+		last_pan_position = event.global_position
+		get_viewport().set_input_as_handled()
+		return
+
+	# ======================== DRAWING TOOLS ========================
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		var canvas_pos = _get_canvas_position(event.position)
+
+		# Handle pencil and eraser tools
+		if current_tool == TOOLS.PENCIL or current_tool == TOOLS.ERASER:
+			is_drawing = event.pressed
+			last_position = canvas_pos
+
+			if event.pressed:
+				_draw_pixel_smooth(canvas_pos, current_color if current_tool == TOOLS.PENCIL else Color.TRANSPARENT)
+
+		# Handle fill tool
+		elif current_tool == TOOLS.FILL and event.pressed:
+			_flood_fill(canvas_pos)
+
+		# Handle rectangle and circle shape tools
+		elif current_tool in [TOOLS.RECTANGLE, TOOLS.CIRCLE]:
+			if event.pressed:
+				shape_start_pos = canvas_pos
+				is_drawing = true
+			else:
+				_finalize_shape(canvas_pos)  # Draw final shape
+
+		texture_update_pending = true  # Mark canvas for redraw
+
+	# Continuous drawing while moving mouse
+	elif event is InputEventMouseMotion and is_drawing:
 		var current_pos = _get_canvas_position(event.position)
-		if current_pos.distance_to(last_position) >= 0.5: 
-			if current_tool == TOOLS.PENCIL:
-				_draw_line(last_position, current_pos, current_color) # Draw a line between the last two point
-			elif current_tool == TOOLS.ERASER:
-				_draw_line(last_position, current_pos, Color.from_hsv(0, 0, 0, 0)) # Draw a line between the last two point
+
+		# Use point interpolation for smooth drawing
+		if current_tool in [TOOLS.PENCIL, TOOLS.ERASER]:
+			var points = _get_smoothed_points(last_position, current_pos)
+			for point in points:
+				_draw_pixel_smooth(point, current_color if current_tool == TOOLS.PENCIL else Color.TRANSPARENT)
 			last_position = current_pos
-			texture_update_pending = true
-	
+
+		texture_update_pending = true
+
+	# Final texture update if anything was drawn
+	if texture_update_pending:
+		_update_texture()
+		texture_update_pending = false
+
+# Convert screen coordinates to zoomed canvas coordinates
+func _get_canvas_position(screen_pos: Vector2) -> Vector2:
+	var canvas_local_pos = canvas.get_local_mouse_position()
+	var scroll_offset = Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
+	return (canvas_local_pos + scroll_offset) / zoom_level
+
+# Draw a single pixel with smoothing (anti-aliasing)
+func _draw_pixel_smooth(pos: Vector2, color: Color):
+	var radius = brush_size / 2.0
+	# Iterate over all pixels in the brush area
+	for x in range(-int(radius), int(radius) + 1):
+		for y in range(-int(radius), int(radius) + 1):
+			var pixel_pos = Vector2i(pos.floor()) + Vector2i(x, y)
+			var distance = Vector2(x, y).distance_to(Vector2.ZERO)
+			if distance <= radius:
+				# Calculate weight based on distance from center
+				var weight = 1.0 - (distance / radius)
+				var existing_color = current_image.get_pixelv(pixel_pos)
+				var blended_color = existing_color.lerp(color, weight)
+				if _is_within_canvas(pixel_pos):
+					current_image.set_pixelv(pixel_pos, blended_color)
+
+# Generate intermediate points between two positions for smooth lines
+func _get_smoothed_points(start: Vector2, end: Vector2) -> Array:
+	var points = []
+	var distance = start.distance_to(end)
+	var steps = clamp(int(distance * 2.5), 2, 20)  # More distance = more steps
+
+	for i in range(steps + 1):
+		var t = float(i) / steps
+		points.append(start.lerp(end, t))  # Linear interpolation between points
+
+	return points
+
+# Finalize drawing of shapes (rectangle or circle)
+func _finalize_shape(end_pos: Vector2):
+	match current_tool:
+		TOOLS.RECTANGLE:
+			_draw_rect_shape(shape_start_pos, end_pos)
+		TOOLS.CIRCLE:
+			var radius = shape_start_pos.distance_to(end_pos)
+			_draw_circle_shape(shape_start_pos, radius)
+	_update_texture()
+
 
 func _on_tool_selected(tool: TOOLS):
 	current_tool = tool
@@ -547,31 +617,6 @@ func _input(event):
 		scroll_container.scroll_horizontal = target_h
 		scroll_container.scroll_vertical = target_v
 		print("Centered at: ", Vector2(target_h, target_v))
-	
-
-func _unhandled_input(event: InputEvent):
-	# Pan with wheel mouse click
-	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_MIDDLE:
-			if event.pressed:
-				# Start panning
-				panning = true
-				last_pan_position = get_global_mouse_position()
-				Input.set_default_cursor_shape(Input.CURSOR_DRAG)
-				get_viewport().set_input_as_handled()
-			else:
-				# End panning
-				panning = false
-				Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-				get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion and panning:
-		# Panning moving
-		var current_pos = get_global_mouse_position() # Get mouse global pos
-		var delta = last_pan_position - current_pos # Calculate the diference of positions
-		scroll_container.scroll_horizontal += delta.x # Scroll X acording to dX
-		scroll_container.scroll_vertical += delta.y #Scroll Y acording to dY
-		last_pan_position = current_pos
-		get_viewport().set_input_as_handled()
 
 func _process(delta):
 	if texture_update_pending:
