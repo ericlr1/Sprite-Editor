@@ -39,6 +39,11 @@ var texture_update_pending = false
 var canvas_drawing: CanvasDrawing 
 var panning := false
 var last_pan_position := Vector2.ZERO
+var update_cooldown = 0.0
+
+# === Plugin Settings ===
+var panning_sensitivity := 1.2
+var zoom_sensitivity := 0.05 # Closer to 0 (Smother scroll) and closer to 1 (Rough scroll)
 
 @onready var scroll_container: ScrollContainer = $VBoxContainer/ScrollContainer
 @onready var canvas: TextureRect = $VBoxContainer/ScrollContainer/Canvas
@@ -99,8 +104,8 @@ func _ready():
 	canvas.focus_mode = Control.FOCUS_CLICK
 	
 	# Setup anti-aliasing
-	get_viewport().msaa_2d = Viewport.MSAA_4X
-	get_viewport().canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	get_viewport().msaa_2d = Viewport.MSAA_DISABLED  # No AA to have perfect pixels
+	get_viewport().canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 
 func _setup_theme():
 	var bg_color = get_theme_color("base_color", "Editor")
@@ -164,8 +169,9 @@ func new_image(width: int, height: int):
 	await get_tree().process_frame
 	
 	# Force reset scroll to top-left
-	scroll_container.scroll_horizontal = 0
-	scroll_container.scroll_vertical = 0
+	scroll_container.queue_redraw()
+	canvas.queue_redraw()
+	get_viewport().set_input_as_handled()
 	print("New image created. Size: %dx%d" % [width, height])
 
 func load_texture(texture: ImageTexture):
@@ -188,27 +194,25 @@ func _update_texture():
 		
 		current_texture.set_image(current_image)
 		canvas.texture = current_texture
+		canvas.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		canvas.queue_redraw()
 		
 		#print("Texture updated: ", current_texture)
 
 func _update_zoom(zoom_anchor: Vector2 = Vector2.ZERO):
 	if current_image:
-		var img_size = current_image.get_size()
-		var new_size = img_size * zoom_level
+		var prev_zoom = zoom_level
+		var new_size = current_image.get_size() * zoom_level
 		
-		# Update canvas dimensions
+		# Update canvas size first
 		canvas.custom_minimum_size = new_size
 		canvas.size = new_size
 		
-		# Calculate new scroll position to maintain focus point
 		if zoom_anchor != Vector2.ZERO:
-			var target_x = zoom_anchor.x * zoom_level - (scroll_container.size.x / 2)
-			var target_y = zoom_anchor.y * zoom_level - (scroll_container.size.y / 2)
-			
-			scroll_container.scroll_horizontal = clamp(target_x, 0, new_size.x - scroll_container.size.x)
-			scroll_container.scroll_vertical = clamp(target_y, 0, new_size.y - scroll_container.size.y)
-		
+			# Calculate new scroll to keep the same point under the cursor
+			var ratio = zoom_level / prev_zoom
+			scroll_container.scroll_horizontal = (zoom_anchor.x * ratio - scroll_container.size.x / 2) * zoom_level
+			scroll_container.scroll_vertical = (zoom_anchor.y * ratio - scroll_container.size.y / 2) * zoom_level
 		print("Zoom Updated:", zoom_level, " | Canvas Size:", canvas.size)
 
 func _is_within_canvas(pos: Vector2) -> bool:
@@ -327,20 +331,21 @@ func _on_canvas_gui_input(event):
 		# Calculate zoom anchor point relative to canvas and scroll offset
 		var canvas_rect = canvas.get_global_rect()
 		var zoom_anchor = (
-			mouse_pos - canvas_rect.position +
-			Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
-		) / zoom_level
+			(event.global_position - canvas_rect.position + 
+			Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)) 
+			/ zoom_level
+		)
 
 		# Zoom in (scroll up)
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			zoom_level = clamp(zoom_level * 1.1, 0.1, 20.0)
+			zoom_level = clamp(zoom_level * (1 + zoom_sensitivity), 0.1, 20.0)
 			_update_zoom(zoom_anchor)
 			get_viewport().set_input_as_handled()
 			return
 
 		# Zoom out (scroll down)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			zoom_level = clamp(zoom_level / 1.1, 0.1, 20.0)
+			zoom_level = clamp(zoom_level / (1 + zoom_sensitivity), 0.1, 20.0)
 			_update_zoom(zoom_anchor)
 			get_viewport().set_input_as_handled()
 			return
@@ -363,7 +368,7 @@ func _on_canvas_gui_input(event):
 
 	elif event is InputEventMouseMotion and panning:
 		# Compute movement delta with smoothing factor (inverse direction of mouse)
-		var delta = (event.global_position - last_pan_position) * zoom_level * 1.2
+		var delta = (event.global_position - last_pan_position) * zoom_level * panning_sensitivity
 	
 		# Apply H/V scroll
 		scroll_container.scroll_horizontal -= delta.x
@@ -432,25 +437,40 @@ func _on_canvas_gui_input(event):
 
 # Convert screen coordinates to zoomed canvas coordinates
 func _get_canvas_position(screen_pos: Vector2) -> Vector2:
-	var canvas_local_pos = canvas.get_local_mouse_position()
-	var scroll_offset = Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)
-	return (canvas_local_pos + scroll_offset) / zoom_level
-
+	# Get mouse position relative to scroll container's viewport
+	var viewport_pos = scroll_container.get_global_transform().affine_inverse() * get_global_mouse_position()
+	# Convert to canvas coordinates (zoomed image space)
+	var canvas_pos = (viewport_pos + Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)) / zoom_level
+	return canvas_pos
+	
 # Draw a single pixel with smoothing (anti-aliasing)
 func _draw_pixel_smooth(pos: Vector2, color: Color):
+	# Calculate the brush radius based on brush size
 	var radius = brush_size / 2.0
-	# Iterate over all pixels in the brush area
-	for x in range(-int(radius), int(radius) + 1):
-		for y in range(-int(radius), int(radius) + 1):
-			var pixel_pos = Vector2i(pos.floor()) + Vector2i(x, y)
-			var distance = Vector2(x, y).distance_to(Vector2.ZERO)
-			if distance <= radius:
-				# Calculate weight based on distance from center
-				var weight = 1.0 - (distance / radius)
-				var existing_color = current_image.get_pixelv(pixel_pos)
-				var blended_color = existing_color.lerp(color, weight)
-				if _is_within_canvas(pixel_pos):
-					current_image.set_pixelv(pixel_pos, blended_color)
+
+	# Define the square area around the center position `pos` where the brush will affect pixels
+	var start_x = int(pos.x - radius)
+	var start_y = int(pos.y - radius)
+	var end_x = int(pos.x + radius)
+	var end_y = int(pos.y + radius)
+	
+	# Loop through every pixel in the square brush area
+	for x in range(start_x, end_x + 1):
+		for y in range(start_y, end_y + 1):
+			var pixel_pos = Vector2i(x, y)
+			# Only affect pixels that are inside the canvas boundaries
+			if _is_within_canvas(pixel_pos):
+				# Calculate distance from current pixel to the center of the brush
+				var distance = Vector2(x - pos.x, y - pos.y).length()
+				# If the pixel is within the circular brush radius
+				if distance <= radius:
+					# Calculate blending weight based on how close the pixel is to the center
+					# Closer pixels get more of the new color, farther ones get less (soft edge effect)
+					var weight = 1.0 #- (distance / radius) #TODO: Veri si acabamos haciendo esto para el pincel o algo
+					var existing_color = current_image.get_pixelv(pixel_pos) # Get the existing pixel color from the canvas
+					
+					# Blend the existing color with the brush color using the weight, and apply it
+					current_image.set_pixelv(pixel_pos, existing_color.lerp(color, weight))
 
 # Generate intermediate points between two positions for smooth lines
 func _get_smoothed_points(start: Vector2, end: Vector2) -> Array:
@@ -620,10 +640,11 @@ func _input(event):
 
 func _process(delta):
 	if texture_update_pending:
-		_update_texture()
-		texture_update_pending = false
-		# Limit to 60 FPS
-		await get_tree().create_timer(1.0/60.0).timeout
+		update_cooldown += delta
+		if update_cooldown >= 1.0 / 60.0:  # Limit to 60 FPS
+			_update_texture()
+			texture_update_pending = false
+			update_cooldown = 0.0
 
 func _exit_tree():
 	# Cleanup CanvasDrawing node
