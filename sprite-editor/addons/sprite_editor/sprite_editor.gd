@@ -156,6 +156,9 @@ func _setup_tools():
 		tools_container.add_child(btn)
 
 func new_image(width: int, height: int):
+	current_image = null  # Reset first
+	await get_tree().process_frame  # Force sync
+	
 	current_image = Image.create(width, height, false, Image.FORMAT_RGBA8)
 	current_image.fill(Color(1, 1, 1, 1)) 
 	current_texture = null
@@ -423,7 +426,7 @@ func _on_canvas_gui_input(event):
 
 		# Use point interpolation for smooth drawing
 		if current_tool in [TOOLS.PENCIL, TOOLS.ERASER]:
-			var points = _get_smoothed_points(last_position, current_pos)
+			var points = _get_line_points(last_position, current_pos)
 			for point in points:
 				_draw_pixel_smooth(point, current_color if current_tool == TOOLS.PENCIL else Color.TRANSPARENT)
 			last_position = current_pos
@@ -441,11 +444,17 @@ func _get_canvas_position(screen_pos: Vector2) -> Vector2:
 	var viewport_pos = scroll_container.get_global_transform().affine_inverse() * get_global_mouse_position()
 	# Convert to canvas coordinates (zoomed image space)
 	var canvas_pos = (viewport_pos + Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)) / zoom_level
-	return canvas_pos
 	
+	# Clamp to avoid out-of-bounds
+	canvas_pos.x = clamp(canvas_pos.x, 0, current_image.get_width() - 1)
+	canvas_pos.y = clamp(canvas_pos.y, 0, current_image.get_height() - 1)
+	return canvas_pos
+
 # Draw a single pixel with smoothing (anti-aliasing)
 func _draw_pixel_smooth(pos: Vector2, color: Color):
 	# Calculate the brush radius based on brush size
+
+
 	var radius = brush_size / 2.0
 
 	# Define the square area around the center position `pos` where the brush will affect pixels
@@ -453,6 +462,9 @@ func _draw_pixel_smooth(pos: Vector2, color: Color):
 	var start_y = int(pos.y - radius)
 	var end_x = int(pos.x + radius)
 	var end_y = int(pos.y + radius)
+
+
+
 	
 	# Loop through every pixel in the square brush area
 	for x in range(start_x, end_x + 1):
@@ -464,25 +476,15 @@ func _draw_pixel_smooth(pos: Vector2, color: Color):
 				var distance = Vector2(x - pos.x, y - pos.y).length()
 				# If the pixel is within the circular brush radius
 				if distance <= radius:
-					# Calculate blending weight based on how close the pixel is to the center
-					# Closer pixels get more of the new color, farther ones get less (soft edge effect)
-					var weight = 1.0 #- (distance / radius) #TODO: Veri si acabamos haciendo esto para el pincel o algo
+					#TODO: Ver si acabamos haciendo esto para el pincel o algo
+					# [Calculate blending weight based on how close the pixel is to the center
+					# Closer pixels get more of the new color, farther ones get less (soft edge effect)]
+					var weight = 1.0 #- (distance / radius) #TODO: Ver si acabamos haciendo esto para el pincel o algo
 					var existing_color = current_image.get_pixelv(pixel_pos) # Get the existing pixel color from the canvas
 					
 					# Blend the existing color with the brush color using the weight, and apply it
 					current_image.set_pixelv(pixel_pos, existing_color.lerp(color, weight))
 
-# Generate intermediate points between two positions for smooth lines
-func _get_smoothed_points(start: Vector2, end: Vector2) -> Array:
-	var points = []
-	var distance = start.distance_to(end)
-	var steps = clamp(int(distance * 2.5), 2, 20)  # More distance = more steps
-
-	for i in range(steps + 1):
-		var t = float(i) / steps
-		points.append(start.lerp(end, t))  # Linear interpolation between points
-
-	return points
 
 # Finalize drawing of shapes (rectangle or circle)
 func _finalize_shape(end_pos: Vector2):
