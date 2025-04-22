@@ -9,8 +9,10 @@ class CanvasDrawing:
 	
 	func _init(p: Node):
 		parent = p
+		print("CanvasDrawing._init(parent: %s)" % p.name)
 	
 	func _draw():
+		print("CanvasDrawing._draw() - is_drawing: %s, tool: %s" % [parent.is_drawing, parent.TOOLS.keys()[parent.current_tool]])
 		if parent.is_drawing and parent.current_tool in [parent.TOOLS.RECTANGLE, parent.TOOLS.CIRCLE]:
 			var end_pos = get_local_mouse_position()
 			var preview_color = parent.current_color.darkened(0.2)
@@ -56,6 +58,7 @@ var zoom_sensitivity := 0.05 # Closer to 0 (Smother scroll) and closer to 1 (Rou
 @onready var new_dialog: Window = preload("res://addons/sprite_editor/NewDialog.tscn").instantiate()
 
 func _ready():
+	print("_ready() - Initializing editor")
 	# Remove existing CanvasDrawing node if it exists
 	for child in scroll_container.get_children():
 		if child is CanvasDrawing:
@@ -108,6 +111,7 @@ func _ready():
 	get_viewport().canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 
 func _setup_theme():
+	print("_setup_theme()")
 	var bg_color = get_theme_color("base_color", "Editor")
 	# Panel styling
 	var panel = StyleBoxFlat.new()
@@ -154,8 +158,11 @@ func _setup_tools():
 		btn.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 		btn.connect("pressed", _on_tool_selected.bind(tools[tool_name]))
 		tools_container.add_child(btn)
+	
+	print("_setup_tools() - Creating %d tools" % tools.size())
 
 func new_image(width: int, height: int):
+	print("new_image(width: %d, height: %d)" % [width, height])
 	current_image = null  # Reset first
 	await get_tree().process_frame  # Force sync
 	
@@ -178,6 +185,7 @@ func new_image(width: int, height: int):
 	print("New image created. Size: %dx%d" % [width, height])
 
 func load_texture(texture: ImageTexture):
+	print("load_texture(texture: %s, size: %s)" % [texture.resource_path, texture.get_size()])
 	current_texture = texture
 	current_image = current_texture.get_image()
 	_update_texture()
@@ -200,12 +208,14 @@ func _update_texture():
 		canvas.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		canvas.queue_redraw()
 		
-		#print("Texture updated: ", current_texture)
+		print("_update_texture() - Image size: %s" % [current_image.get_size() if current_image else "null"])
 
 func _update_zoom(zoom_anchor: Vector2 = Vector2.ZERO):
 	if current_image:
 		var prev_zoom = zoom_level
 		var new_size = current_image.get_size() * zoom_level
+		
+		print("_update_zoom(zoom_level: %.2f, anchor: %s)" % [zoom_level, zoom_anchor])
 		
 		# Update canvas size first
 		canvas.custom_minimum_size = new_size
@@ -219,9 +229,12 @@ func _update_zoom(zoom_anchor: Vector2 = Vector2.ZERO):
 		print("Zoom Updated:", zoom_level, " | Canvas Size:", canvas.size)
 
 func _is_within_canvas(pos: Vector2) -> bool:
-	return pos.x >= 0 && pos.x < current_image.get_width() && pos.y >= 0 && pos.y < current_image.get_height()
+	var res = pos.x >= 0 && pos.x < current_image.get_width() && pos.y >= 0 && pos.y < current_image.get_height()
+	print("_is_within_canvas(pos: %s) -> %s" % [pos, res])
+	return res
 
 func _draw_pixel(pos: Vector2, color: Color):
+	print("_draw_pixel(pos: %s, color: %s, brush_size: %d)" % [pos, color, brush_size])
 	#current_image.lock()									# Block the image to safe-write
 	var radius = brush_size / 2.0
 	for x in range(brush_size):								# Width iteration (Circle)
@@ -234,12 +247,14 @@ func _draw_pixel(pos: Vector2, color: Color):
 	#current_image.unlock()									# Unblock the image
 
 func _draw_line(start: Vector2, end: Vector2, color: Color):
+	print("_draw_line(start: %s, end: %s, color: %s)" % [start, end, color])
 	var points = _get_line_points(start, end)				# Get the points in the line
 	for point in points:									# Iterate all the points in the line
 		_draw_pixel(point, color)							# Changes the color of the pixels in the line like the pencil
 	texture_update_pending = true
 
 func _get_line_points(start: Vector2, end: Vector2) -> Array:
+	print("_get_line_points(start: %s, end: %s)" % [start, end])
 	# === Bresenham Algorithm ===
 	var points = []
 	var dx := absi(end.x - start.x) # Distance in X
@@ -265,6 +280,7 @@ func _get_line_points(start: Vector2, end: Vector2) -> Array:
 	return points # Return tall the points in the line
 
 func _flood_fill(pos: Vector2):
+	print("_flood_fill(initial_pos: %s)" % pos)
 	var target_color = current_image.get_pixelv(pos) # Gets the color where the user clicked (the one thah should be changed to the current_color)
 	if target_color == current_color: # If the clicked color is the same as the current_color skip all
 		return
@@ -291,6 +307,7 @@ func _flood_fill(pos: Vector2):
 	_update_texture() # TODO: Revisar si esto está haciendo que hayan dos update_texture al soltar el click
 
 func _draw_rect_shape(start: Vector2, end: Vector2):
+	print("_draw_rect_shape(start: %s, end: %s)" % [start, end])
 	# Get image dimensions for boundary checks
 	var img_width = current_image.get_width()
 	var img_height = current_image.get_height()
@@ -306,6 +323,7 @@ func _draw_rect_shape(start: Vector2, end: Vector2):
 	current_image.fill_rect(rect, current_color)
 
 func _draw_circle_shape(center: Vector2, radius: float):
+	print("_draw_circle_shape(center: %s, radius: %.1f)" % [center, radius])
 	var img_width = current_image.get_width()
 	var img_height = current_image.get_height()
 	
@@ -326,6 +344,7 @@ func _draw_circle_shape(center: Vector2, radius: float):
 
 # TODO: Fix the double call for the zoom function when zooming with the mouse wheel
 func _on_canvas_gui_input(event):
+	print("_on_canvas_gui_input(event: %s)" % event)
 	# ======================== ZOOM WITH CTRL + MOUSE WHEEL ========================
 	if event.ctrl_pressed and event is InputEventMouseButton:
 		var viewport = get_viewport()
@@ -448,13 +467,14 @@ func _get_canvas_position(screen_pos: Vector2) -> Vector2:
 	# Clamp to avoid out-of-bounds
 	canvas_pos.x = clamp(canvas_pos.x, 0, current_image.get_width() - 1)
 	canvas_pos.y = clamp(canvas_pos.y, 0, current_image.get_height() - 1)
+	print("_get_canvas_position(screen_pos: %s) -> %s" % [screen_pos, canvas_pos])
 	return canvas_pos
 
 # Draw a single pixel with smoothing (anti-aliasing)
 func _draw_pixel_smooth(pos: Vector2, color: Color):
+	print("_draw_pixel_smooth(pos: %s, color: %s, brush_size: %d)" % [pos, color, brush_size])
+	
 	# Calculate the brush radius based on brush size
-
-
 	var radius = brush_size / 2.0
 
 	# Define the square area around the center position `pos` where the brush will affect pixels
@@ -462,9 +482,6 @@ func _draw_pixel_smooth(pos: Vector2, color: Color):
 	var start_y = int(pos.y - radius)
 	var end_x = int(pos.x + radius)
 	var end_y = int(pos.y + radius)
-
-
-
 	
 	# Loop through every pixel in the square brush area
 	for x in range(start_x, end_x + 1):
@@ -488,6 +505,7 @@ func _draw_pixel_smooth(pos: Vector2, color: Color):
 
 # Finalize drawing of shapes (rectangle or circle)
 func _finalize_shape(end_pos: Vector2):
+	print("_finalize_shape(end_pos: %s, tool: %s)" % [end_pos, TOOLS.keys()[current_tool]])
 	match current_tool:
 		TOOLS.RECTANGLE:
 			_draw_rect_shape(shape_start_pos, end_pos)
@@ -498,17 +516,20 @@ func _finalize_shape(end_pos: Vector2):
 
 
 func _on_tool_selected(tool: TOOLS):
+	print("_on_tool_selected(tool: %s)" % TOOLS.keys()[tool])
 	current_tool = tool
 
 func _on_color_changed(color: Color):
+	print("_on_color_changed(color: %s)" % color)
 	current_color = color
 
 func _on_brush_size_changed(value: float):
-	print("Brush size changed: ", value)
+	print("_on_brush_size_changed(value: %.1f)" % value)
 	brush_size_label.text = "%d" % value
 	brush_size = value
 
 func _on_new_dialog_confirmed(width: int, height: int):
+	print("_on_new_dialog_confirmed(width: %d, height: %d)" % [width, height])
 	new_image(width, height)
 
 func _on_NewButton_pressed():
@@ -528,6 +549,7 @@ func _on_OpenButton_pressed():
 	open_dialog.popup_centered_ratio(0.8)
 
 func _on_OpenDialog_file_selected(path: String):
+	print("_on_OpenDialog_file_selected(path: %s)" % path)
 	if not FileAccess.file_exists(path):
 		OS.alert("File not found!", "Open Error")
 		return
@@ -561,6 +583,7 @@ func _on_SaveButton_pressed():
 	save_dialog.popup_centered()
 
 func _on_SaveDialog_file_selected(path: String):
+	print("_on_SaveDialog_file_selected(path: %s)" % path)
 	# Validate image exists
 	if not current_image:
 		OS.alert("No image to save!", "Save Error")
@@ -643,12 +666,13 @@ func _input(event):
 func _process(delta):
 	if texture_update_pending:
 		update_cooldown += delta
-		if update_cooldown >= 1.0 / 60.0:  # Limit to 60 FPS
+		if update_cooldown >= 1.0 / 120.0:  # Limit to 120 FPS
 			_update_texture()
 			texture_update_pending = false
 			update_cooldown = 0.0
 
 func _exit_tree():
+	print("_exit_tree()")
 	# Cleanup CanvasDrawing node
 	if canvas_drawing and is_instance_valid(canvas_drawing):
 		canvas_drawing.queue_free()
