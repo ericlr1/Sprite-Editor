@@ -26,7 +26,7 @@ class CanvasDrawing:
 					draw_arc( parent.shape_start_pos, radius, 0, TAU, 32, preview_color, 1.0, false)
 
 # Class-level variables
-enum TOOLS {PENCIL, ERASER, FILL, RECTANGLE, CIRCLE, NONE}
+enum TOOLS {PENCIL, ERASER, FILL, RECTANGLE, CIRCLE, EYE_DROPPER, NONE}
 var current_tool := TOOLS.NONE
 var current_color := Color.BLACK
 var brush_size := 5
@@ -85,6 +85,7 @@ func _ready():
 	$VBoxContainer/Toolbar/New.pressed.connect(_on_NewButton_pressed)
 	$VBoxContainer/Toolbar/Open.pressed.connect(_on_OpenButton_pressed)
 	$VBoxContainer/Toolbar/Save.pressed.connect(_on_SaveButton_pressed)
+	$VBoxContainer/Toolbar/Eyedropper.pressed.connect(_on_eyedropper_pressed)
 	
 	# Connect save dialog signals
 	save_dialog.file_selected.connect(_on_SaveDialog_file_selected)
@@ -192,23 +193,27 @@ func load_texture(texture: ImageTexture):
 
 func _update_texture():
 	if current_image:
-		# If not a RGBA8 format, convert it to RGBA8
-		if current_image.get_format() != Image.FORMAT_RGBA8:
-			current_image.convert(Image.FORMAT_RGBA8)
-		
-		# DEBUG: Print image data
-		#print("Updating texture. Image format: ", current_image.get_format(), " | Size: ", current_image.get_size())
-		# Create a new image on new_image
+		# -- If we already have an image loaded, proceed --
+
+		# Re‑use a saved ImageTexture instead of instantiating a new one
+		# every frame (avoids constant allocation/GC overhead).
 		if not current_texture:
-			print("DEBUG: No current texture, creating a new one")
-			current_texture = ImageTexture.new()
-		
+			current_texture = ImageTexture.new()      # create it once
+			print("DEBUG: Created new ImageTexture")  # helpful log message
+
+		# Copy the pixel data from current_image into the texture object
 		current_texture.set_image(current_image)
+
+		# Push the texture to the CanvasItem we’re drawing on
 		canvas.texture = current_texture
+
+		# Use the nearest‑neighbor filter so pixels stay crisp (no smoothing)
 		canvas.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		canvas.queue_redraw()
-		
-		print("_update_texture() - Image size: %s" % [current_image.get_size() if current_image else "null"])
+
+		# If no redraw is already scheduled, ask Godot to repaint this node.
+		# This prevents redundant queue_redraw() calls in the same frame.
+		if not texture_update_pending:
+			canvas.queue_redraw()
 
 func _update_zoom(zoom_anchor: Vector2 = Vector2.ZERO):
 	if current_image:
@@ -304,8 +309,8 @@ func _flood_fill(pos: Vector2):
 	
 	# Unlock the inage and update the texture
 	#current_image.unlock() 
-	_update_texture() # TODO: Revisar si esto está haciendo que hayan dos update_texture al soltar el click
-
+	texture_update_pending = true  # Mark for deferred update
+	
 func _draw_rect_shape(start: Vector2, end: Vector2):
 	print("_draw_rect_shape(start: %s, end: %s)" % [start, end])
 	# Get image dimensions for boundary checks
@@ -344,7 +349,7 @@ func _draw_circle_shape(center: Vector2, radius: float):
 
 # TODO: Fix the double call for the zoom function when zooming with the mouse wheel
 func _on_canvas_gui_input(event):
-	print("_on_canvas_gui_input(event: %s)" % event)
+	#print("_on_canvas_gui_input(event: %s)" % event)
 	# ======================== ZOOM WITH CTRL + MOUSE WHEEL ========================
 	if event.ctrl_pressed and event is InputEventMouseButton:
 		var viewport = get_viewport()
@@ -436,6 +441,11 @@ func _on_canvas_gui_input(event):
 				is_drawing = true
 			else:
 				_finalize_shape(canvas_pos)  # Draw final shape
+		
+		elif current_tool == TOOLS.EYE_DROPPER and event.pressed:
+			_handle_eyedropper(canvas_pos)
+			get_viewport().set_input_as_handled()
+			return # Early exit avoids to update texture
 
 		texture_update_pending = true  # Mark canvas for redraw
 
@@ -452,10 +462,9 @@ func _on_canvas_gui_input(event):
 
 		texture_update_pending = true
 
-	# Final texture update if anything was drawn
-	if texture_update_pending:
-		_update_texture()
-		texture_update_pending = false
+	# Instead, rely solely on the cooldown in _process()
+	texture_update_pending = true  # Mark for deferred update
+	get_viewport().set_input_as_handled()
 
 # Convert screen coordinates to zoomed canvas coordinates
 func _get_canvas_position(screen_pos: Vector2) -> Vector2:
@@ -512,7 +521,7 @@ func _finalize_shape(end_pos: Vector2):
 		TOOLS.CIRCLE:
 			var radius = shape_start_pos.distance_to(end_pos)
 			_draw_circle_shape(shape_start_pos, radius)
-	_update_texture()
+	texture_update_pending = true  # Mark for deferred update
 
 
 func _on_tool_selected(tool: TOOLS):
@@ -663,10 +672,22 @@ func _input(event):
 		scroll_container.scroll_vertical = target_v
 		print("Centered at: ", Vector2(target_h, target_v))
 
+func _on_eyedropper_pressed():
+	current_tool = TOOLS.EYE_DROPPER
+	Input.set_default_cursor_shape(Input.CURSOR_POINTING_HAND)
+
+func _handle_eyedropper(pos: Vector2):
+	if current_image:
+		current_color = current_image.get_pixelv(pos)
+		color_picker.color = current_color
+		current_tool = TOOLS.NONE  # Return to previous state
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
 func _process(delta):
 	if texture_update_pending:
 		update_cooldown += delta
-		if update_cooldown >= 1.0 / 120.0:  # Limit to 120 FPS
+		# Throttle to 60 FPS (adjust value as needed)
+		if update_cooldown >= 1.0 / 60.0:
 			_update_texture()
 			texture_update_pending = false
 			update_cooldown = 0.0
