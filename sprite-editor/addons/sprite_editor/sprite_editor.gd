@@ -42,6 +42,7 @@ var canvas_drawing: CanvasDrawing
 var panning := false
 var last_pan_position := Vector2.ZERO
 var update_cooldown = 0.0
+var _brush_offsets := []
 
 # === Plugin Settings ===
 var panning_sensitivity := 1.2
@@ -110,6 +111,8 @@ func _ready():
 	# Setup anti-aliasing
 	get_viewport().msaa_2d = Viewport.MSAA_DISABLED  # No AA to have perfect pixels
 	get_viewport().canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+	
+	_precompute_brush_offsets()
 
 func _setup_theme():
 	print("_setup_theme()")
@@ -252,10 +255,33 @@ func _draw_pixel(pos: Vector2, color: Color):
 	#current_image.unlock()									# Unblock the image
 
 func _draw_line(start: Vector2, end: Vector2, color: Color):
-	print("_draw_line(start: %s, end: %s, color: %s)" % [start, end, color])
-	var points = _get_line_points(start, end)				# Get the points in the line
-	for point in points:									# Iterate all the points in the line
-		_draw_pixel(point, color)							# Changes the color of the pixels in the line like the pencil
+	# Get all the points along the line between start and end
+	var points = _get_line_points(start, end)
+	
+	# Lock the image for batch updates
+	#current_image.lock()
+	
+	# Loop through each point on the line
+	for point in points:
+		var px = int(point.x)
+		var py = int(point.y)
+		
+		# Check if the point is inside the canvas
+		if _is_within_canvas(Vector2i(px, py)):
+			# For each brush offset, apply the brush around the point
+			for offset in _brush_offsets:
+				var x = px + offset.x
+				var y = py + offset.y
+				
+				# Check if the new pixel position is within the image bounds
+				if x >= 0 and x < current_image.get_width() and y >= 0 and y < current_image.get_height():
+					# Set the pixel to the given color
+					current_image.set_pixel(x, y, color)
+	
+	# Unlock the image after modifications
+	#current_image.unlock()
+	
+	# Mark the texture as needing an update
 	texture_update_pending = true
 
 func _get_line_points(start: Vector2, end: Vector2) -> Array:
@@ -481,36 +507,43 @@ func _get_canvas_position(screen_pos: Vector2) -> Vector2:
 
 # Draw a single pixel with smoothing (anti-aliasing)
 func _draw_pixel_smooth(pos: Vector2, color: Color):
-	print("_draw_pixel_smooth(pos: %s, color: %s, brush_size: %d)" % [pos, color, brush_size])
+	# If there are no brush offsets, do nothing
+	if _brush_offsets.is_empty():
+		return
 	
-	# Calculate the brush radius based on brush size
-	var radius = brush_size / 2.0
-
-	# Define the square area around the center position `pos` where the brush will affect pixels
-	var start_x = int(pos.x - radius)
-	var start_y = int(pos.y - radius)
-	var end_x = int(pos.x + radius)
-	var end_y = int(pos.y + radius)
+	# Get the width and height of the current image
+	var img_width = current_image.get_width()
+	var img_height = current_image.get_height()
+	# Round the given position to the nearest integer pixel coordinates
+	var center = Vector2i(pos)
 	
-	# Loop through every pixel in the square brush area
-	for x in range(start_x, end_x + 1):
-		for y in range(start_y, end_y + 1):
-			var pixel_pos = Vector2i(x, y)
-			# Only affect pixels that are inside the canvas boundaries
-			if _is_within_canvas(pixel_pos):
-				# Calculate distance from current pixel to the center of the brush
-				var distance = Vector2(x - pos.x, y - pos.y).length()
-				# If the pixel is within the circular brush radius
-				if distance <= radius:
-					#TODO: Ver si acabamos haciendo esto para el pincel o algo
-					# [Calculate blending weight based on how close the pixel is to the center
-					# Closer pixels get more of the new color, farther ones get less (soft edge effect)]
-					var weight = 1.0 #- (distance / radius) #TODO: Ver si acabamos haciendo esto para el pincel o algo
-					var existing_color = current_image.get_pixelv(pixel_pos) # Get the existing pixel color from the canvas
-					
-					# Blend the existing color with the brush color using the weight, and apply it
-					current_image.set_pixelv(pixel_pos, existing_color.lerp(color, weight))
-
+	# Lock the image for batch updates (improves performance)
+	#current_image.lock()
+	
+	# Loop through each offset in the brush
+	for offset in _brush_offsets:
+		# Calculate the actual pixel position
+		var px = center.x + offset.x
+		var py = center.y + offset.y
+		
+		# Check if the pixel is within the image bounds
+		if px >= 0 and px < img_width and py >= 0 and py < img_height:
+			# Calculate the distance from the center for smooth fading
+			var distance = Vector2(offset.x, offset.y).length()
+			# Compute the blending weight based on distance
+			var weight = 1.0 - (distance / (brush_size / 2.0))
+			# Clamp the weight between 0 and 1
+			weight = clamp(weight, 0.0, 1.0)
+			
+			# Get the existing color at this pixel
+			var existing_color = current_image.get_pixel(px, py)
+			# Blend the existing color with the new color based on the weight
+			current_image.set_pixel(px, py, existing_color.lerp(color, weight))
+	
+	# Unlock the image after all updates are done
+	#current_image.unlock()
+	# Mark the texture to be updated later
+	texture_update_pending = true
 
 # Finalize drawing of shapes (rectangle or circle)
 func _finalize_shape(end_pos: Vector2):
@@ -536,6 +569,7 @@ func _on_brush_size_changed(value: float):
 	print("_on_brush_size_changed(value: %.1f)" % value)
 	brush_size_label.text = "%d" % value
 	brush_size = value
+	_precompute_brush_offsets() # Recompute when brush size changes
 
 func _on_new_dialog_confirmed(width: int, height: int):
 	print("_on_new_dialog_confirmed(width: %d, height: %d)" % [width, height])
@@ -683,11 +717,22 @@ func _handle_eyedropper(pos: Vector2):
 		current_tool = TOOLS.NONE  # Return to previous state
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
+func _precompute_brush_offsets():
+	_brush_offsets.clear()
+	var radius = brush_size / 2.0
+	var radius_sq = radius * radius
+	for x in range(brush_size):
+		for y in range(brush_size):
+			var dx = x - radius
+			var dy = y - radius
+			if Vector2(dx, dy).length_squared() <= radius_sq:
+				_brush_offsets.append(Vector2i(dx, dy))
+
 func _process(delta):
 	if texture_update_pending:
 		update_cooldown += delta
-		# Throttle to 60 FPS (adjust value as needed)
-		if update_cooldown >= 1.0 / 60.0:
+		# Throttle to 30 FPS for heavy operations
+		if update_cooldown >= 1.0 / 30.0:
 			_update_texture()
 			texture_update_pending = false
 			update_cooldown = 0.0
