@@ -25,28 +25,35 @@ class CanvasDrawing:
 					var radius = parent.shape_start_pos.distance_to(end_pos)
 					draw_arc( parent.shape_start_pos, radius, 0, TAU, 32, preview_color, 1.0, false)
 
-# Class-level variables
+# === Class-level variables ===
+
+# Enumeration of available tools in the editor
 enum TOOLS {PENCIL, ERASER, FILL, RECTANGLE, CIRCLE, EYE_DROPPER, NONE}
-var current_tool := TOOLS.NONE
-var current_color := Color.BLACK
-var brush_size := 5
-var zoom_level := 1.0
-var is_drawing := false
-var last_position := Vector2.ZERO
-var shape_start_pos := Vector2.ZERO
-var current_image: Image
-var current_texture: ImageTexture
-var current_path := ""
-var texture_update_pending = false
-var canvas_drawing: CanvasDrawing 
-var panning := false
-var last_pan_position := Vector2.ZERO
-var update_cooldown = 0.0
-var _brush_offsets := []
+
+# Editor state variables
+var current_tool := TOOLS.NONE              # Currently selected tool
+var current_color := Color.BLACK            # Current drawing color
+var brush_size := 5                         # Size of the brush
+var zoom_level := 1.0                       # Current zoom level on the canvas
+var is_drawing := false                     # Whether the user is currently drawing
+var last_position := Vector2.ZERO           # Last mouse position (for drawing strokes)
+var shape_start_pos := Vector2.ZERO         # Start position when drawing shapes
+var current_image: Image                    # The image being edited
+var current_texture: ImageTexture           # Texture representation of the image
+var current_path := ""                      # File path of the currently loaded/saved image
+var texture_update_pending = false          # Flag to indicate if the texture needs an update
+var canvas_drawing: CanvasDrawing           # Custom drawing logic or helper object
+var panning := false                        # Whether the user is currently panning the view
+var last_pan_position := Vector2.ZERO       # Last mouse position used for panning
+var update_cooldown = 0.0                   # Time remaining before allowing another texture update
+var _brush_offsets := []                    # Used to store offsets for brush stamping
 
 # === Plugin Settings ===
-var panning_sensitivity := 1.2
-var zoom_sensitivity := 0.05 # Closer to 0 (Smother scroll) and closer to 1 (Rough scroll)
+
+var panning_sensitivity := 1.2              # Sensitivity when panning the canvas
+var zoom_sensitivity := 0.05                # Zoom scroll sensitivity (lower = smoother)
+
+# === UI Node References (initialized when the scene is ready) ===
 
 @onready var scroll_container: ScrollContainer = $VBoxContainer/ScrollContainer
 @onready var canvas: TextureRect = $VBoxContainer/ScrollContainer/Canvas
@@ -57,6 +64,7 @@ var zoom_sensitivity := 0.05 # Closer to 0 (Smother scroll) and closer to 1 (Rou
 @onready var save_dialog: FileDialog = $SaveDialog
 @onready var open_dialog: FileDialog = $OpenDialog
 @onready var new_dialog: Window = preload("res://addons/sprite_editor/NewDialog.tscn").instantiate()
+
 
 func _ready():
 	print("_ready() - Initializing editor")
