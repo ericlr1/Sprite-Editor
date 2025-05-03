@@ -50,8 +50,10 @@ var _brush_offsets := []                    # Used to store offsets for brush st
 
 # === Plugin Settings ===
 
+var settings_dialog: Window = preload("res://addons/sprite_editor/SettingsDialog.tscn").instantiate()
 var panning_sensitivity := 1.2              # Sensitivity when panning the canvas
 var zoom_sensitivity := 0.05                # Zoom scroll sensitivity (lower = smoother)
+var current_theme := "Dark"                 # Selected theme in settings
 
 # === UI Node References (initialized when the scene is ready) ===
 
@@ -121,6 +123,13 @@ func _ready():
 	get_viewport().canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
 	
 	_precompute_brush_offsets()
+	
+	# Setup settings window
+	add_child(settings_dialog)
+	settings_dialog.hide()
+	settings_dialog.theme_selected.connect(_on_theme_selected)
+	settings_dialog.zoom_sensitivity_changed.connect(_on_zoom_sensitivity_changed)
+	settings_dialog.panning_sensitivity_changed.connect(_on_panning_sensitivity_changed)
 
 func _setup_theme():
 	print("_setup_theme()")
@@ -735,6 +744,34 @@ func _precompute_brush_offsets():
 			var dy = y - radius
 			if Vector2(dx, dy).length_squared() <= radius_sq:
 				_brush_offsets.append(Vector2i(dx, dy))
+
+func _on_settings_pressed():
+	settings_dialog.popup_centered()
+
+func _on_theme_selected(theme_name):
+	current_theme = theme_name
+	_apply_theme(theme_name)
+
+func _on_zoom_sensitivity_changed(value):
+	zoom_sensitivity = value
+
+func _on_panning_sensitivity_changed(value):
+	panning_sensitivity = value
+
+func _apply_theme(theme_name):
+	var bg_color: Color
+	match theme_name:
+		"Dark":
+			bg_color = Color(0.15, 0.15, 0.15)
+		"Light":
+			bg_color = Color(0.85, 0.85, 0.85)
+		"Blue":
+			bg_color = Color(0.1, 0.2, 0.3)
+	
+	var bg_style = StyleBoxFlat.new()
+	bg_style.bg_color = bg_color
+	scroll_container.add_theme_stylebox_override("panel", bg_style)
+	_setup_theme() # Volver a aplicar estilos de UI
 
 func _process(delta):
 	if texture_update_pending:

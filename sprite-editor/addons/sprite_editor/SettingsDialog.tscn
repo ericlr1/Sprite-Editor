@@ -1,0 +1,78 @@
+[gd_scene load_steps=2 format=3 uid="uid://b76a2kekuvba2"]
+
+[ext_resource type="Script" path="res://addons/sprite_editor/SettingsDialog.gd" id="1_rodyb"]
+
+[node name="SettingsDialog" type="Window"]
+title = "Settings"
+initial_position = 1
+size = Vector2i(300, 175)
+script = ExtResource("1_rodyb")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -65.0
+offset_top = -56.0
+offset_right = 65.0
+offset_bottom = 56.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ThemeSelector" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="Label" type="Label" parent="VBoxContainer/ThemeSelector"]
+layout_mode = 2
+text = "Theme:"
+
+[node name="OptionButton" type="OptionButton" parent="VBoxContainer/ThemeSelector"]
+layout_mode = 2
+
+[node name="ZoomSlider" type="VBoxContainer" parent="VBoxContainer"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+alignment = 1
+
+[node name="Label" type="Label" parent="VBoxContainer/ZoomSlider"]
+layout_mode = 2
+text = "Zoom speed:"
+
+[node name="HSlider" type="HSlider" parent="VBoxContainer/ZoomSlider"]
+layout_mode = 2
+min_value = 0.01
+max_value = 0.2
+step = 0.01
+value = 0.01
+
+[node name="PanningSlider" type="VBoxContainer" parent="VBoxContainer"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+alignment = 1
+
+[node name="Label" type="Label" parent="VBoxContainer/PanningSlider"]
+layout_mode = 2
+text = "Panning speed:"
+
+[node name="HSlider" type="HSlider" parent="VBoxContainer/PanningSlider"]
+layout_mode = 2
+min_value = 0.5
+max_value = 3.0
+step = 0.1
+value = 0.5
+
+[node name="Buttons" type="HBoxContainer" parent="VBoxContainer"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+alignment = 1
+
+[node name="OKButton" type="Button" parent="VBoxContainer/Buttons"]
+layout_mode = 2
+text = "Ok"
+
+[node name="CancelButton" type="Button" parent="VBoxContainer/Buttons"]
+layout_mode = 2
+text = "Cancel"
