@@ -328,32 +328,76 @@ func _get_line_points(start: Vector2, end: Vector2) -> Array:
 	return points # Return tall the points in the line
 
 func _flood_fill(pos: Vector2):
-	print("_flood_fill(initial_pos: %s)" % pos)
-	var target_color = current_image.get_pixelv(pos) # Gets the color where the user clicked (the one thah should be changed to the current_color)
-	if target_color == current_color: # If the clicked color is the same as the current_color skip all
+	# === SCANLINE ALGORITHM === 
+	# Get the color at the starting position
+	var target_color = current_image.get_pixelv(pos)
+	
+	# If the target color is the same as the fill color, no need to do anything
+	if target_color == current_color:
 		return
 
-	# (TODO: Maybe change to Scanline in the future)
-	# === BFS Algorithm to fill the shape === 
-	var queue = [pos] # Init a queue with the initial position
-	#current_image.lock() # Blocks the iname to safe-write on it
+	# Get image dimensions
+	var img_width = current_image.get_width()
+	var img_height = current_image.get_height()
+
+	# Clamp the starting coordinates to valid image bounds
+	var start_x = int(clamp(pos.x, 0, img_width - 1))
+	var start_y = int(clamp(pos.y, 0, img_height - 1))
 	
-	# Loop the queue until it's empty
+	# Initialize the queue with a horizontal segment on the starting row
+	# Each queue item is [y, x_start, x_end]
+	var queue = []
+	queue.append([start_y, start_x, start_x])
+
+	# Directions to check vertically (above and below)
+	var directions = [-1, 1]
+	
+	# Continue processing while there are segments in the queue
 	while not queue.is_empty():
-		var p = queue.pop_front() # Extract the firs element of the queue
-		if _is_within_canvas(p) && current_image.get_pixelv(p) == target_color: # Verify that the pixel in inside the canvas and the pixel is the same color as the target
-			current_image.set_pixelv(p, current_color) # Change the color of the selected pixel
-			
-			# Add the next 4 directions to the queue
-			queue.append(Vector2(p.x + 1, p.y)) # Right
-			queue.append(Vector2(p.x - 1, p.y)) # Left
-			queue.append(Vector2(p.x, p.y + 1)) # Bottom
-			queue.append(Vector2(p.x, p.y - 1)) # Up
-	
-	# Unlock the inage and update the texture
-	#current_image.unlock() 
-	texture_update_pending = true  # Mark for deferred update
-	
+		var segment = queue.pop_front()
+		var y = segment[0]
+		var x1 = segment[1]
+		var x2 = segment[2]
+		
+		# Expand to the left from x1 as far as the color matches
+		var left = x1
+		while left >= 0 and current_image.get_pixel(left, y) == target_color:
+			left -= 1
+		left += 1  # Move back to the first valid pixel
+		
+		# Expand to the right from x2 as far as the color matches
+		var right = x2
+		while right < img_width and current_image.get_pixel(right, y) == target_color:
+			right += 1
+		right -= 1  # Move back to the last valid pixel
+		
+		# Fill the entire horizontal span with the new color
+		for x in range(left, right + 1):
+			current_image.set_pixel(x, y, current_color)
+		
+		# Check the rows above and below the current row
+		for dy in directions:
+			var ny = y + dy
+			# Skip if out of bounds
+			if ny < 0 or ny >= img_height:
+				continue
+				
+			var nx = left
+			while nx <= right:
+				# If the color matches, we found a new span to fill
+				if current_image.get_pixel(nx, ny) == target_color:
+					var sx = nx
+					# Move to the end of the matching segment
+					while nx <= right and current_image.get_pixel(nx, ny) == target_color:
+						nx += 1
+					# Add the new span to the queue for future processing
+					queue.append([ny, sx, nx - 1])
+				else:
+					nx += 1
+
+	# Mark that the texture needs to be updated on screen
+	texture_update_pending = true
+
 func _draw_rect_shape(start: Vector2, end: Vector2):
 	print("_draw_rect_shape(start: %s, end: %s)" % [start, end])
 	# Get image dimensions for boundary checks
