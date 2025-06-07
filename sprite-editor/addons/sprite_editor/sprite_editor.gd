@@ -272,11 +272,11 @@ func _draw_pixel(pos: Vector2, color: Color):
 	#current_image.unlock()									# Unblock the image
 
 func _draw_line(start: Vector2, end: Vector2, color: Color):
+	if not current_image:
+		return
+		
 	# Get all the points along the line between start and end
-	var points = _get_line_points(start, end)
-	
-	# Lock the image for batch updates
-	#current_image.lock()
+	var points = _get_line_points(start.floor(), end.floor())
 	
 	# Loop through each point on the line
 	for point in points:
@@ -284,25 +284,20 @@ func _draw_line(start: Vector2, end: Vector2, color: Color):
 		var py = int(point.y)
 		
 		# Check if the point is inside the canvas
-		if _is_within_canvas(Vector2i(px, py)):
+		if px >= 0 and px < current_image.get_width() and py >= 0 and py < current_image.get_height():
 			# For each brush offset, apply the brush around the point
 			for offset in _brush_offsets:
 				var x = px + offset.x
 				var y = py + offset.y
 				
-				# Check if the new pixel position is within the image bounds
+				# Check bounds
 				if x >= 0 and x < current_image.get_width() and y >= 0 and y < current_image.get_height():
-					# Set the pixel to the given color
 					current_image.set_pixel(x, y, color)
 	
-	# Unlock the image after modifications
-	#current_image.unlock()
-	
-	# Mark the texture as needing an update
 	texture_update_pending = true
 
 func _get_line_points(start: Vector2, end: Vector2) -> Array:
-	print("_get_line_points(start: %s, end: %s)" % [start, end])
+	#print("_get_line_points(start: %s, end: %s)" % [start, end])
 	# === Bresenham Algorithm ===
 	var points = []
 	var dx := absi(end.x - start.x) # Distance in X
@@ -505,8 +500,11 @@ func _on_canvas_gui_input(event):
 		get_viewport().set_input_as_handled()
 		return
 
-	# ======================== DRAWING TOOLS ========================
+		# ======================== DRAWING TOOLS ========================
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if not current_image:
+			return
+			
 		var canvas_pos = _get_canvas_position(event.position)
 
 		# Handle pencil and eraser tools
@@ -515,6 +513,7 @@ func _on_canvas_gui_input(event):
 			last_position = canvas_pos
 
 			if event.pressed:
+				# For single clicks, draw directly
 				_draw_pixel_smooth(canvas_pos, current_color if current_tool == TOOLS.PENCIL else Color.TRANSPARENT)
 
 		# Handle fill tool
@@ -538,14 +537,17 @@ func _on_canvas_gui_input(event):
 
 	# Continuous drawing while moving mouse
 	elif event is InputEventMouseMotion and is_drawing:
+		if not current_image:
+			return
+			
 		var current_pos = _get_canvas_position(event.position)
 
 		# Use point interpolation for smooth drawing
 		if current_tool in [TOOLS.PENCIL, TOOLS.ERASER]:
-			var points = _get_line_points(last_position, current_pos)
-			for point in points:
-				_draw_pixel_smooth(point, current_color if current_tool == TOOLS.PENCIL else Color.TRANSPARENT)
-			last_position = current_pos
+			# Only draw if we've moved at least 1 pixel in canvas space
+			if current_pos.distance_to(last_position) >= 1.0:
+				_draw_line(last_position, current_pos, current_color if current_tool == TOOLS.PENCIL else Color.TRANSPARENT)
+				last_position = current_pos
 
 		texture_update_pending = true
 
@@ -555,15 +557,16 @@ func _on_canvas_gui_input(event):
 
 # Convert screen coordinates to zoomed canvas coordinates
 func _get_canvas_position(screen_pos: Vector2) -> Vector2:
-	# Get mouse position relative to scroll container's viewport
-	var viewport_pos = scroll_container.get_global_transform().affine_inverse() * get_global_mouse_position()
+	# Get mouse position relative to scroll container
+	var viewport_pos = scroll_container.get_local_mouse_position()
+	
 	# Convert to canvas coordinates (zoomed image space)
 	var canvas_pos = (viewport_pos + Vector2(scroll_container.scroll_horizontal, scroll_container.scroll_vertical)) / zoom_level
 	
 	# Clamp to avoid out-of-bounds
-	canvas_pos.x = clamp(canvas_pos.x, 0, current_image.get_width() - 1)
-	canvas_pos.y = clamp(canvas_pos.y, 0, current_image.get_height() - 1)
-	print("_get_canvas_position(screen_pos: %s) -> %s" % [screen_pos, canvas_pos])
+	if current_image:
+		canvas_pos.x = clamp(canvas_pos.x, 0, current_image.get_width() - 1)
+		canvas_pos.y = clamp(canvas_pos.y, 0, current_image.get_height() - 1)
 	return canvas_pos
 
 # Draw a single pixel with smoothing (anti-aliasing)

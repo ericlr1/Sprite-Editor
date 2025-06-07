@@ -33,12 +33,18 @@ text = "Theme:"
 [node name="OptionButton" type="OptionButton" parent="VBoxContainer/ThemeSelector"]
 layout_mode = 2
 selected = 0
-item_count = 3
+item_count = 6
 popup/item_0/text = "Dark"
 popup/item_1/text = "Light"
 popup/item_1/id = 1
 popup/item_2/text = "Blue"
 popup/item_2/id = 2
+popup/item_3/text = "Dark"
+popup/item_3/id = 3
+popup/item_4/text = "Light"
+popup/item_4/id = 4
+popup/item_5/text = "Blue"
+popup/item_5/id = 5
 
 [node name="ZoomSlider" type="VBoxContainer" parent="VBoxContainer"]
 custom_minimum_size = Vector2(100, 0)
