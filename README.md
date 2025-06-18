@@ -8,8 +8,6 @@ This project develops a free and open source tool for Godot, helping small studi
 
 - Paint Bucket flood-fill powered by efficient BFS/DFS algorithms
 
-- Selection (rectangular & color-based)
-
 - Color Wheel (RGBA, HSV, hex) & Eyedropper for precise sampling
 
 **File Management**
