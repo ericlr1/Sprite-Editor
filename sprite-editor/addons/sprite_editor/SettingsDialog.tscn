@@ -23,6 +23,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="ThemeSelector" type="HBoxContainer" parent="VBoxContainer"]
+visible = false
 layout_mode = 2
 alignment = 1
 
@@ -33,7 +34,7 @@ text = "Theme:"
 [node name="OptionButton" type="OptionButton" parent="VBoxContainer/ThemeSelector"]
 layout_mode = 2
 selected = 0
-item_count = 6
+item_count = 18
 popup/item_0/text = "Dark"
 popup/item_1/text = "Light"
 popup/item_1/id = 1
@@ -45,6 +46,30 @@ popup/item_4/text = "Light"
 popup/item_4/id = 4
 popup/item_5/text = "Blue"
 popup/item_5/id = 5
+popup/item_6/text = "Dark"
+popup/item_6/id = 6
+popup/item_7/text = "Light"
+popup/item_7/id = 7
+popup/item_8/text = "Blue"
+popup/item_8/id = 8
+popup/item_9/text = "Dark"
+popup/item_9/id = 9
+popup/item_10/text = "Light"
+popup/item_10/id = 10
+popup/item_11/text = "Blue"
+popup/item_11/id = 11
+popup/item_12/text = "Dark"
+popup/item_12/id = 12
+popup/item_13/text = "Light"
+popup/item_13/id = 13
+popup/item_14/text = "Blue"
+popup/item_14/id = 14
+popup/item_15/text = "Dark"
+popup/item_15/id = 15
+popup/item_16/text = "Light"
+popup/item_16/id = 16
+popup/item_17/text = "Blue"
+popup/item_17/id = 17
 
 [node name="ZoomSlider" type="VBoxContainer" parent="VBoxContainer"]
 custom_minimum_size = Vector2(100, 0)

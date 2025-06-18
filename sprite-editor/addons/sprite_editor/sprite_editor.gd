@@ -185,7 +185,8 @@ func _setup_tools():
 func new_image(width: int, height: int):
 	print("new_image(width: %d, height: %d)" % [width, height])
 	current_image = null  # Reset first
-	await get_tree().process_frame  # Force sync
+
+
 	
 	current_image = Image.create(width, height, false, Image.FORMAT_RGBA8)
 	current_image.fill(Color(1, 1, 1, 1)) 
@@ -197,7 +198,7 @@ func new_image(width: int, height: int):
 	_update_zoom()
 	
 	# Wait for UI to update
-	await get_tree().process_frame
+	#await get_tree().process_frame
 	
 	# Force reset scroll to top-left
 	scroll_container.queue_redraw()
@@ -624,6 +625,7 @@ func _finalize_shape(end_pos: Vector2):
 func _on_tool_selected(tool: TOOLS):
 	print("_on_tool_selected(tool: %s)" % TOOLS.keys()[tool])
 	current_tool = tool
+	_reset_drawing_state()
 
 func _on_color_changed(color: Color):
 	print("_on_color_changed(color: %s)" % color)
@@ -772,14 +774,20 @@ func _input(event):
 
 func _on_eyedropper_pressed():
 	current_tool = TOOLS.EYE_DROPPER
+	_reset_drawing_state()
 	Input.set_default_cursor_shape(Input.CURSOR_POINTING_HAND)
 
 func _handle_eyedropper(pos: Vector2):
 	if current_image:
 		current_color = current_image.get_pixelv(pos)
 		color_picker.color = current_color
-		current_tool = TOOLS.NONE  # Return to previous state
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+
+func _reset_drawing_state():
+	print("Resetting drawing state")
+	is_drawing = false
+	last_position = Vector2.ZERO
+	shape_start_pos = Vector2.ZERO
 
 func _precompute_brush_offsets():
 	_brush_offsets.clear()
@@ -793,6 +801,8 @@ func _precompute_brush_offsets():
 				_brush_offsets.append(Vector2i(dx, dy))
 
 func _on_settings_pressed():
+	# Set initial values before showing dialog
+	settings_dialog.set_initial_values(zoom_sensitivity, panning_sensitivity, current_theme)
 	settings_dialog.popup_centered()
 
 func _on_theme_selected(theme_name):
@@ -831,6 +841,10 @@ func _process(delta):
 
 func _exit_tree():
 	print("_exit_tree()")
-	# Cleanup CanvasDrawing node
-	if canvas_drawing and is_instance_valid(canvas_drawing):
+	
+	if is_queued_for_deletion():
+		return
+		
+	if canvas_drawing and is_instance_valid(canvas_drawing) and canvas_drawing.is_inside_tree():
 		canvas_drawing.queue_free()
+		canvas_drawing = null

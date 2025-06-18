@@ -7,11 +7,6 @@ var editor_ui_instance: Control
 func _enter_tree() -> void:
 	print("\n--- Plugin Initialization ---")
 	
-	# Verify UI scene exists
-	if !ResourceLoader.exists(EditorUI.resource_path):
-		printerr("UI scene not found at:", EditorUI.resource_path)
-		return
-	
 	# Instantiate UI
 	editor_ui_instance = EditorUI.instantiate()
 	print("UI instance created:", editor_ui_instance)
